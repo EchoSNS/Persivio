@@ -13,7 +13,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.100"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -22,7 +22,28 @@ publish = false
 # the crates it introduces. Versions below checked on 2026-11-22.
 [workspace.dependencies]
 # Internal crates
+mp-core = { path = "crates/mp-core" }
 mp-engine = { path = "crates/mp-engine" }
+
+# Async
+async-trait = "0.1.92"
+tokio = "1.54.1"
+tokio-util = "0.7.20"
+
+# Errors
+thiserror = "2.0.21"
+
+# Data
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+url = { version = "2.5.9", features = ["serde"] }
+uuid = { version = "1.29.3", features = ["v7", "serde"] }
+
+# Persistence
+sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+
+# Testing
+tempfile = "3.27.0"
 
 # CLI
 clap = { version = "4.6.9", features = ["derive"] }

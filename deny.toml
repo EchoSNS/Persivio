@@ -19,12 +19,13 @@ ignore = []
 [licenses]
 # Only licenses actually present in the dependency graph (cargo-deny warns on unused
 # entries). When a new crate brings a new license, check it before adding it here.
-# Expected permissive additions later: BSD-2/3-Clause, ISC, Zlib, CDLA-Permissive-2.0 (TLS
-# roots). Prefer a per-crate `exceptions` entry for anything copyleft (e.g. MPL-2.0).
+# Expected permissive additions later: BSD-2/3-Clause, ISC, CDLA-Permissive-2.0 (TLS roots).
+# Prefer a per-crate `exceptions` entry for anything copyleft (e.g. MPL-2.0).
 allow = [
     "MIT",
     "Apache-2.0",
     "Unicode-3.0",
+    "Zlib", # foldhash (via sqlx -> hashbrown), added Phase 1
 ]
 confidence-threshold = 0.8
 exceptions = []

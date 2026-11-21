@@ -1,16 +1,18 @@
 //! SQLite persistence (sqlx, WAL mode): tasks, segments, torrent state and settings.
 //!
-//! **Boundary:** this is the only crate that touches the database (ADR-012).
+//! **Boundary:** this is the only crate that touches the database (ADR-012). It stores
+//! and loads; it does not decide. Business rules such as "is this state transition
+//! legal?" live in `mp-core` and are enforced by the engine before calling the store.
+//!
+//! Every query is a `&'static str` literal with bound parameters. sqlx 0.9 enforces
+//! this at compile time (`SqlSafeStr`), which rules out string-built SQL injection.
 
-/// The crate's package name, used by logging and diagnostics to identify the component.
-pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
+mod convert;
+mod error;
+mod store;
+
+pub use error::StoreError;
+pub use store::{SETTINGS_KEY, Store, StoredTask};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, "mp-store");
-    }
-}
+mod tests;

@@ -2,17 +2,41 @@
 //!
 //! **Boundary:** this crate is pure. It performs no I/O and never spawns tasks;
 //! everything here must be testable with plain `#[test]` functions.
-//! The task state machine (`transition`) will live here (Phase 1).
+//!
+//! Map of the crate:
+//! - [`ids`]: [`TaskId`] and [`UnixMillis`] timestamps.
+//! - [`source`]: where a download comes from ([`Source`]), with log-safe `Debug`.
+//! - [`checksum`]: expected hashes ([`Checksum`]).
+//! - [`state`]: the task state machine ([`TaskState`], [`transition`]).
+//! - [`task`]: what the user asked for ([`TaskSpec`]) and what the engine reports
+//!   ([`TaskSnapshot`]), plus [`Segment`] and [`FileEntry`].
+//! - [`progress`]: lock-free progress counters ([`ProgressSink`]) and [`Progress`] samples.
+//! - [`event`]: [`EngineEvent`]s broadcast to front ends.
+//! - [`settings`]: user-tunable [`Settings`] with defaults and validation.
+//! - [`protocol`]: the [`Protocol`] trait implemented by `mp-http` and `mp-torrent`.
 
-/// The crate's package name, used by logging and diagnostics to identify the component.
-pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
+pub mod checksum;
+pub mod event;
+pub mod ids;
+pub mod progress;
+pub mod protocol;
+pub mod settings;
+pub mod source;
+pub mod state;
+pub mod task;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, "mp-core");
-    }
-}
+pub use checksum::{Checksum, ChecksumAlgorithm, ChecksumError};
+pub use event::EngineEvent;
+pub use ids::{TaskId, UnixMillis};
+pub use progress::{Progress, ProgressSample, ProgressSink, eta_secs};
+pub use protocol::{
+    CheckpointError, CheckpointSink, Outcome, Protocol, ProtocolError, RateLimiter,
+    ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, Unlimited,
+};
+pub use settings::{Settings, SettingsError, TorrentSettings};
+pub use source::{Source, SourceError};
+pub use state::{FailReason, InvalidTransition, TaskState, TaskStateKind, transition};
+pub use task::{
+    FileEntry, HttpResumeInfo, MAX_CONNECTIONS, Segment, SpecError, TaskKind, TaskSnapshot,
+    TaskSpec,
+};
