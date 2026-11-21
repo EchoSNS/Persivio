@@ -1,0 +1,58 @@
+# cargo-deny configuration (format of cargo-deny 0.22, from `cargo deny init`).
+# Run: cargo deny check
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Empty = check dependencies for every target, so Windows-only and macOS-only crates are
+# covered even when CI runs `cargo deny` on Linux.
+targets = []
+all-features = true
+
+[output]
+feature-depth = 1
+
+[advisories]
+# RustSec advisory DB. Vulnerabilities, unmaintained and unsound crates fail the check.
+# Any entry added to `ignore` must carry a comment with the reason and a review date.
+ignore = []
+
+[licenses]
+# Only licenses actually present in the dependency graph (cargo-deny warns on unused
+# entries). When a new crate brings a new license, check it before adding it here.
+# Expected permissive additions later: BSD-2/3-Clause, ISC, Zlib, CDLA-Permissive-2.0 (TLS
+# roots). Prefer a per-crate `exceptions` entry for anything copyleft (e.g. MPL-2.0).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[licenses.private]
+# Our own workspace crates are `publish = false`; don't require them to match `allow`.
+ignore = true
+registries = []
+
+[bans]
+multiple-versions = "warn"
+# Disallow `*` version requirements, but allow path-only deps between our private crates.
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = [
+    # TLS must go through rustls (security checklist, section 11).
+    { name = "openssl-sys", reason = "use rustls; no system OpenSSL" },
+]
+skip = []
+skip-tree = []
+
+[sources]
+# Only crates.io; any git or alternative-registry dependency must be added here deliberately.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

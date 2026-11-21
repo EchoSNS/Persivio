@@ -1,0 +1,19 @@
+[package]
+name = "millipede-cli"
+description = "Headless command-line client for the Millipede download engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "millipede"
+path = "src/main.rs"
+
+[dependencies]
+mp-engine = { workspace = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

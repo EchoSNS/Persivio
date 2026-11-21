@@ -1,0 +1,46 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Node / frontend (apps/desktop, extension)
+node_modules/
+dist/
+.svelte-kit/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Fuzzing
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+
+# Coverage / profiling
+*.profraw
+*.profdata
+lcov.info
+/coverage/
+
+# Runtime artifacts from local testing
+*.part
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+.DS_Store
+Thumbs.db

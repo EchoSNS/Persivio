@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/mp-core",
+    "crates/mp-http",
+    "crates/mp-torrent",
+    "crates/mp-store",
+    "crates/mp-engine",
+    "crates/mp-testkit",
+    "apps/cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Shared dependency versions. Only crates that a member actually uses are listed:
+# Cargo warns on unused entries, and each phase adds (and re-checks on crates.io)
+# the crates it introduces. Versions below checked on 2026-11-22.
+[workspace.dependencies]
+# Internal crates
+mp-engine = { path = "crates/mp-engine" }
+
+# CLI
+clap = { version = "4.6.9", features = ["derive"] }
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+# priority -1 so the individual lints below can override group members.
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

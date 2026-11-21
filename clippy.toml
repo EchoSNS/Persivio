@@ -1,0 +1,8 @@
+# unwrap/expect are fine in #[test] code and #[cfg(test)] modules;
+# the workspace lints only flag them in production code.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# Proper nouns the pedantic `doc_markdown` lint would otherwise demand backticks for.
+# ".." keeps clippy's built-in defaults (GitHub, JavaScript, ...).
+doc-valid-idents = ["BitTorrent", "SQLite", "WebView2", "WebKitGTK", ".."]

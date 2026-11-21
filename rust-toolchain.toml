@@ -1,0 +1,5 @@
+# Track the latest stable release; CI and local builds use the same channel.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
