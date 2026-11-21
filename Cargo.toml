@@ -27,6 +27,8 @@ mp-engine = { path = "crates/mp-engine" }
 
 # Async
 async-trait = "0.1.92"
+bytes = "1.12.2"
+futures = "0.3.34"
 tokio = "1.54.1"
 tokio-util = "0.7.20"
 
@@ -38,6 +40,14 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 url = { version = "2.5.9", features = ["serde"] }
 uuid = { version = "1.29.3", features = ["v7", "serde"] }
+
+# HTTP (reqwest features are chosen per crate)
+axum = "0.8.9"
+reqwest = { version = "0.13.5", default-features = false }
+
+# Hashing / compression
+flate2 = "1.1.11"
+sha2 = "0.11.1"
 
 # Persistence
 sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
