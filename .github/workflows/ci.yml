@@ -63,3 +63,36 @@ jobs:
       # nextest does not run doctests; run them separately.
       - name: Doctests
         run: cargo test --workspace --doc --locked
+
+  fuzz:
+    # libFuzzer needs nightly and sanitizer support, which is reliable on Linux.
+    # Phase 3 criterion: content_range runs 5 minutes without a crash.
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: content_range
+            seconds: 300
+          - target: content_disposition
+            seconds: 120
+          - target: sanitize_filename
+            seconds: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz ${{ matrix.target }} for ${{ matrix.seconds }}s
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=${{ matrix.seconds }}
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/

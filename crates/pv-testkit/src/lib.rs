@@ -27,6 +27,8 @@
 //! | `/disposition/{name}?cd=...` | Like `/file`, with `Content-Disposition: <cd>` |
 //! | `/mutable/{name}` | Like `/file`; content and `ETag` change on `POST /control/mutate/{name}` |
 //! | `/gzip/{name}` | gzip-compresses the whole body unless the request sends `Accept-Encoding: identity` |
+//! | `/gzip-always/{name}` | Always gzip-compresses (a misconfigured server) |
+//! | `/redirect-to?location=URL` | `302` to any `URL` (e.g. `file:///etc/passwd`) |
 
 mod body;
 mod fixture;

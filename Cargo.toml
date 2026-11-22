@@ -9,6 +9,8 @@ members = [
     "crates/pv-testkit",
     "apps/cli",
 ]
+# Fuzz targets build with nightly + cargo-fuzz in their own workspace.
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,6 +25,7 @@ publish = false
 # the crates it introduces. Versions below checked on 2026-11-22.
 [workspace.dependencies]
 # Internal crates
+pv-testkit = { path = "crates/pv-testkit" }
 pv-core = { path = "crates/pv-core" }
 pv-engine = { path = "crates/pv-engine" }
 
@@ -35,11 +38,13 @@ tokio-util = "0.7.20"
 
 # Errors
 thiserror = "2.0.21"
+tracing = "0.1.44"
 
 # Data
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 url = { version = "2.5.9", features = ["serde"] }
+percent-encoding = "2.3.2"
 uuid = { version = "1.29.3", features = ["v7", "serde"] }
 
 # HTTP (reqwest features are chosen per crate)
@@ -54,6 +59,7 @@ sha2 = "0.11.1"
 sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 
 # Testing
+proptest = "1.12.0"
 tempfile = "3.27.0"
 
 # CLI

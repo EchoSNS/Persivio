@@ -160,6 +160,8 @@ impl TestServer {
             .route("/mutable/{name}", get(mutable))
             .route("/control/mutate/{name}", post(control_mutate))
             .route("/gzip/{name}", get(gzip))
+            .route("/gzip-always/{name}", get(gzip_always))
+            .route("/redirect-to", get(redirect_to))
             .layer(middleware::from_fn_with_state(state.clone(), record))
             .with_state(state.clone());
 
@@ -548,6 +550,18 @@ async fn gzip(State(s): Shared, Path(name): Path<String>, headers: HeaderMap) ->
             },
         );
     }
+    gzip_body(&entry)
+}
+
+/// A misconfigured server: compresses even when the client asks for `identity`.
+async fn gzip_always(State(s): Shared, Path(name): Path<String>) -> Response {
+    let Some(entry) = s.file(&name) else {
+        return not_found();
+    };
+    gzip_body(&entry)
+}
+
+fn gzip_body(entry: &Entry) -> Response {
     // Misbehaving-on-purpose: ignores Range and compresses the whole body.
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     let compressed = encoder
@@ -573,4 +587,20 @@ fn insert_fixture(state: &AppState, fixture: Fixture) {
         .write()
         .unwrap_or_else(PoisonError::into_inner)
         .insert(fixture.name, Arc::new(Entry::new(fixture.bytes, 0)));
+}
+
+/// `302` to an arbitrary `location` (used to test that clients refuse unsafe schemes).
+async fn redirect_to(Query(q): Params) -> Response {
+    let Some(location) = q
+        .get("location")
+        .and_then(|l| HeaderValue::from_str(l).ok())
+    else {
+        return (StatusCode::BAD_REQUEST, "location required").into_response();
+    };
+    build(
+        Response::builder()
+            .status(StatusCode::FOUND)
+            .header(header::LOCATION, location),
+        Body::empty(),
+    )
 }

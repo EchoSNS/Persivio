@@ -1,18 +1,21 @@
-//! HTTP/HTTPS download protocol: probing, filename resolution, segment planning,
-//! segment workers, the single positional writer and retry policy.
+//! HTTP/HTTPS download protocol: probing, filename resolution, single-connection
+//! transfers with resume (Phase 3), and later segmented downloads (Phase 4).
 //!
-//! **Rules:** segment clients are HTTP/1.1-only and send `Accept-Encoding: identity`
-//! (ADR-003, ADR-011); data is synced before checkpoints are persisted (ADR-005).
+//! **Rules:** the client is HTTP/1.1-only and sends `Accept-Encoding: identity`
+//! (ADR-003, ADR-011); data is synced before checkpoints are persisted (ADR-005); every
+//! server-provided name goes through [`filename::sanitize_filename`] and
+//! [`filename::contained_path`].
 
-/// The crate's package name, used by logging and diagnostics to identify the component.
-pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
+pub mod client;
+pub mod content_range;
+pub mod disposition;
+pub mod filename;
+pub mod probe;
+pub mod protocol;
+pub mod transfer;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn crate_name_matches_package() {
-        assert_eq!(CRATE_NAME, "pv-http");
-    }
-}
+pub use client::{ClientConfig, DownloadRequest, HttpClient, MAX_REDIRECTS};
+pub use content_range::{ContentRange, ContentRangeError, parse_content_range};
+pub use probe::{Probe, probe};
+pub use protocol::HttpProtocol;
+pub use transfer::{Checkpointing, Transfer, TransferOutcome, finalize, run_single};

@@ -1,0 +1,41 @@
+# Fuzz targets for untrusted-input parsers. Requires nightly + cargo-fuzz:
+#   cargo install cargo-fuzz
+#   cargo +nightly fuzz run content_range -- -max_total_time=300
+# Runs in CI on Linux (see .github/workflows/ci.yml, job `fuzz`).
+[package]
+name = "persivio-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+pv-http = { path = "../crates/pv-http" }
+
+# Separate workspace: the main workspace builds on stable.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "content_range"
+path = "fuzz_targets/content_range.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "content_disposition"
+path = "fuzz_targets/content_disposition.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sanitize_filename"
+path = "fuzz_targets/sanitize_filename.rs"
+test = false
+doc = false
+bench = false

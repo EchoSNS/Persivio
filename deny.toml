@@ -19,12 +19,14 @@ ignore = []
 [licenses]
 # Only licenses actually present in the dependency graph (cargo-deny warns on unused
 # entries). When a new crate brings a new license, check it before adding it here.
-# Expected permissive additions later: BSD-2-Clause, ISC, CDLA-Permissive-2.0 (TLS roots).
+# Expected permissive additions later: BSD-2-Clause.
 # Prefer a per-crate `exceptions` entry for anything copyleft (e.g. MPL-2.0).
 allow = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause", # matchit (axum router, dev-only via pv-testkit), added Phase 2
+    "CDLA-Permissive-2.0", # webpki-root-certs (Mozilla CA data, via rustls), added Phase 3
+    "ISC", # rustls, rustls-webpki, aws-lc-rs, untrusted, added Phase 3
     "Unicode-3.0",
     "Zlib", # foldhash (via sqlx -> hashbrown), added Phase 1
 ]
