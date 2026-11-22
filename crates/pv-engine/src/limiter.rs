@@ -9,14 +9,19 @@ use pv_core::RateLimiter;
 
 /// One byte-rate bucket.
 ///
-/// The burst is 1/10 s of traffic: a short initial burst keeps measured rates within
-/// ±10 % even for downloads lasting a few seconds. A request bigger than the burst is
-/// paid for in burst-sized installments, because `governor` rejects single requests
-/// larger than its capacity.
+/// Design (each point fixes a measured inaccuracy):
+/// - The bucket holds 1/4 s of traffic, so a waiter that wakes up late (Windows timers
+///   tick every ~15.6 ms; macOS coalesces timers) finds the capacity it missed still
+///   there, instead of it overflowing a full bucket and being lost.
+/// - Requests are paid in installments of 1/8 of the bucket. A request as big as the
+///   whole bucket could only pass when the bucket is *completely full*, and every late
+///   wake-up would waste capacity (that cost ~20 % of the rate).
+/// - The bucket starts **empty** (drained on creation), so the headroom never turns into
+///   an initial burst above the limit.
 #[derive(Debug)]
 pub struct ByteLimiter {
     bucket: DefaultDirectRateLimiter,
-    burst: NonZeroU32,
+    installment: NonZeroU32,
 }
 
 impl ByteLimiter {
@@ -25,10 +30,14 @@ impl ByteLimiter {
     pub fn new(bytes_per_second: u64) -> Self {
         let rate = u32::try_from(bytes_per_second).unwrap_or(u32::MAX).max(1);
         let rate = NonZeroU32::new(rate).unwrap_or(NonZeroU32::MIN);
-        let burst = NonZeroU32::new((rate.get() / 10).max(1)).unwrap_or(NonZeroU32::MIN);
+        let burst = NonZeroU32::new((rate.get() / 4).max(1)).unwrap_or(NonZeroU32::MIN);
+        let installment = NonZeroU32::new((burst.get() / 8).max(1)).unwrap_or(NonZeroU32::MIN);
+        let bucket = Governor::direct(Quota::per_second(rate).allow_burst(burst));
+        // Start empty: consume the initial full bucket.
+        let _ = bucket.check_n(burst);
         Self {
-            bucket: Governor::direct(Quota::per_second(rate).allow_burst(burst)),
-            burst,
+            bucket,
+            installment,
         }
     }
 
@@ -38,9 +47,9 @@ impl ByteLimiter {
         while left > 0 {
             let step = u32::try_from(left)
                 .unwrap_or(u32::MAX)
-                .min(self.burst.get());
+                .min(self.installment.get());
             if let Some(n) = NonZeroU32::new(step) {
-                // Cannot fail: `step` never exceeds the burst capacity.
+                // Cannot fail: an installment never exceeds the bucket capacity.
                 let _ = self.bucket.until_n_ready(n).await;
             }
             left -= u64::from(step);
@@ -111,13 +120,13 @@ mod tests {
     async fn rate_is_accurate_and_large_requests_do_not_error() {
         let limiter = ByteLimiter::new(200_000);
         let started = Instant::now();
-        // 100 KB in 64 KiB chunks (larger than the 20 KB burst) ≈ 0.4 s after the burst.
+        // 100 KB at 200 KB/s = 0.5 s (the bucket starts empty: no initial burst).
         for _ in 0..(100_000 / 10_000) {
             limiter.acquire(10_000).await;
         }
         limiter.acquire(0).await;
         let elapsed = started.elapsed();
-        assert!(elapsed >= Duration::from_millis(380), "{elapsed:?}");
+        assert!(elapsed >= Duration::from_millis(470), "{elapsed:?}");
         assert!(elapsed < Duration::from_millis(700), "{elapsed:?}");
         let huge = ByteLimiter::new(10_000_000);
         let t = Instant::now();
@@ -137,9 +146,9 @@ mod tests {
         );
         global.set(Some(100_000));
         let t = Instant::now();
-        task.acquire(30_000).await; // 10 KB burst, then 20 KB at 100 KB/s
+        task.acquire(30_000).await; // 30 KB at 100 KB/s; the bucket starts empty
         assert!(
-            t.elapsed() >= Duration::from_millis(150),
+            t.elapsed() >= Duration::from_millis(280),
             "{:?}",
             t.elapsed()
         );
@@ -155,7 +164,7 @@ mod tests {
         let t = Instant::now();
         task.acquire(30_000).await;
         assert!(
-            t.elapsed() >= Duration::from_millis(150),
+            t.elapsed() >= Duration::from_millis(280),
             "{:?}",
             t.elapsed()
         );

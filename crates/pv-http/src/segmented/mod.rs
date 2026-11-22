@@ -33,6 +33,9 @@ use crate::client::{DownloadRequest, HttpClient, network_error};
 use crate::content_range::{ContentRange, parse_content_range};
 use crate::probe::ensure_identity;
 
+/// Largest piece of a received chunk that is rate-limited, reserved and counted at once.
+const PIECE: usize = 16 * 1024;
+
 /// Tuning for segmented downloads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SegmentedConfig {
@@ -468,22 +471,28 @@ async fn fetch(ctx: &WorkerCtx, index: u32, pos: u64, end: u64) -> Result<(), Fe
                 Ok(Ok(Some(chunk))) => chunk,
             },
         };
-        let len = u64::try_from(chunk.len()).unwrap_or(u64::MAX);
-        ctx.limiter.acquire(len).await;
-        let r = ctx.table.reserve(index, len);
-        if r.take > 0 {
-            let keep = chunk.slice(..usize::try_from(r.take).unwrap_or(chunk.len()));
-            ctx.writer
-                .write(index, r.offset, keep)
-                .await
-                .map_err(|e| FetchError::Fatal(e.into()))?;
-            ctx.progress.add_downloaded(r.take);
-            progressed = true;
-        }
-        if r.finished {
-            // Our (possibly shrunk) range is complete; dropping the response closes the
-            // connection even if the server would send more.
-            return Ok(());
+        // Pay for, reserve and count the chunk in small pieces: the limiter is fairer
+        // between connections and progress moves smoothly instead of in 64 KiB jumps.
+        let mut chunk = chunk;
+        while !chunk.is_empty() {
+            let piece = chunk.split_to(chunk.len().min(PIECE));
+            let len = u64::try_from(piece.len()).unwrap_or(u64::MAX);
+            ctx.limiter.acquire(len).await;
+            let r = ctx.table.reserve(index, len);
+            if r.take > 0 {
+                let keep = piece.slice(..usize::try_from(r.take).unwrap_or(piece.len()));
+                ctx.writer
+                    .write(index, r.offset, keep)
+                    .await
+                    .map_err(|e| FetchError::Fatal(e.into()))?;
+                ctx.progress.add_downloaded(r.take);
+                progressed = true;
+            }
+            if r.finished {
+                // Our (possibly shrunk) range is complete; dropping the response closes
+                // the connection even if the server would send more.
+                return Ok(());
+            }
         }
     }
 }

@@ -314,14 +314,18 @@ async fn global_speed_limit_is_accurate_within_ten_percent() {
             ..small_segments()
         })
         .await;
+    let mut events = e.subscribe();
     let started = Instant::now();
     let id = e.add(env.spec(&s.url("/file/g.bin"), 4)).await.unwrap();
+    let rate = measured_rate(&mut events, id, 1_500_000).await;
     let done = wait_for(&e, id, TaskStateKind::Completed, Duration::from_secs(10)).await;
-    let elapsed = started.elapsed().as_secs_f64();
-    println!("1.5 MB at 500 KB/s took {elapsed:.2}s (ideal 3.0s)");
+    println!(
+        "transfer rate {rate:.0} B/s (limit 500000); end to end {:.2}s (ideal 3.0s + setup + final fsync)",
+        started.elapsed().as_secs_f64()
+    );
     assert!(
-        (2.7..=3.3).contains(&elapsed),
-        "{elapsed:.2}s is outside 3.0s ± 10%"
+        (450_000.0..=550_000.0).contains(&rate),
+        "{rate:.0} B/s is outside 500 KB/s ± 10%"
     );
     assert_eq!(sha256_file(final_path(&done)).await.unwrap(), f.sha256);
     e.shutdown().await;
@@ -540,4 +544,41 @@ async fn progress_is_batched_at_about_four_hertz() {
     );
     assert!(last_speed > 100_000, "speed estimate is live: {last_speed}");
     e.shutdown().await;
+}
+
+/// Transfer rate between two exact progress samples taken mid-download (from ~20 % to
+/// ~90 %). This measures what the limiter controls, excluding setup and the final
+/// `sync_data`, which on macOS (`F_FULLFSYNC`) can take a large part of a second.
+async fn measured_rate(
+    events: &mut tokio::sync::broadcast::Receiver<EngineEvent>,
+    id: TaskId,
+    total: u64,
+) -> f64 {
+    let mut first: Option<(Instant, u64)> = None;
+    let mut last: Option<(Instant, u64)> = None;
+    while let Ok(Ok(ev)) = tokio::time::timeout(Duration::from_secs(10), events.recv()).await {
+        let EngineEvent::ProgressBatch(batch) = ev else {
+            continue;
+        };
+        let Some(p) = batch.iter().find(|p| p.task_id == id) else {
+            continue;
+        };
+        let now = Instant::now();
+        if p.downloaded >= total / 5 && first.is_none() {
+            first = Some((now, p.downloaded));
+        }
+        if p.downloaded <= total * 9 / 10 {
+            last = Some((now, p.downloaded));
+        } else {
+            break;
+        }
+    }
+    let ((t0, b0), (t1, b1)) = (first.unwrap(), last.unwrap());
+    assert!(
+        t1 > t0 + Duration::from_millis(1000),
+        "measurement window too short"
+    );
+    #[allow(clippy::cast_precision_loss, reason = "byte counts far below 2^52")]
+    let rate = (b1 - b0) as f64 / (t1 - t0).as_secs_f64();
+    rate
 }
