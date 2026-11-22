@@ -14,7 +14,13 @@ feature-depth = 1
 [advisories]
 # RustSec advisory DB. Vulnerabilities, unmaintained and unsound crates fail the check.
 # Any entry added to `ignore` must carry a comment with the reason and a review date.
-ignore = []
+ignore = [
+    # ringbuf 0.4.8 (via librqbit -> librqbit-utp, pinned to ^0.4.7): Consumer::skip/clear
+    # double free only if an element's Drop panics. librqbit-utp's only buffer holds `u8`
+    # (Drop cannot panic), and Persivio runs librqbit TcpOnly (uTP unused). Not reachable.
+    # Review: when librqbit updates librqbit-utp, or by 2027-02-23.
+    { id = "RUSTSEC-2026-0293", reason = "unreachable: u8 elements, uTP disabled; see comment" },
+]
 
 [licenses]
 # Only licenses actually present in the dependency graph (cargo-deny warns on unused

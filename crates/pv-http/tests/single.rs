@@ -400,6 +400,7 @@ async fn cancel_and_resume_continue_from_the_checkpoint() {
     };
     s.clear_requests();
     let resume = ResumeState {
+        torrent: None,
         http: meta.http.clone(),
         segments,
     };
@@ -693,4 +694,55 @@ async fn probe_reports_capabilities() {
     assert!(!plain.accepts_ranges && !plain.resumable());
     assert_eq!(plain.total_size, Some(1_000));
     assert!(plain.body.is_some());
+}
+
+#[tokio::test]
+async fn checksums_are_verified_before_the_rename() {
+    use md5::Digest as _;
+    use pv_core::{Checksum, ChecksumAlgorithm};
+    let f = Fixture::random(NAME, 120_000, 30);
+    let s = start(&f).await;
+    let md5_hex: String = md5::Md5::digest(&f.bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .concat();
+    let source = Source::http(Url::parse(&s.url("/file/data.bin")).unwrap()).unwrap();
+
+    for good in [
+        Checksum::new(ChecksumAlgorithm::Sha256, &f.sha256).unwrap(),
+        Checksum::new(ChecksumAlgorithm::Md5, &md5_hex).unwrap(),
+    ] {
+        let h = Harness::new();
+        let mut ctx = h.ctx(source.clone(), ResumeState::default(), None, None);
+        ctx.task.spec.checksum = Some(good);
+        let path = completed_path(HttpProtocol.run(ctx).await.unwrap());
+        assert_eq!(sha256_file(&path).await.unwrap(), f.sha256);
+        assert!(
+            h.events
+                .phases
+                .lock()
+                .unwrap()
+                .contains(&RunPhase::Verifying)
+        );
+    }
+
+    let h = Harness::new();
+    let mut ctx = h.ctx(source, ResumeState::default(), None, None);
+    ctx.task.spec.checksum =
+        Some(Checksum::new(ChecksumAlgorithm::Sha256, &"ab".repeat(32)).unwrap());
+    let err = HttpProtocol.run(ctx).await.unwrap_err();
+    assert!(
+        matches!(err, ProtocolError::ChecksumMismatch { ref actual, .. } if *actual == f.sha256),
+        "{err}"
+    );
+    assert!(
+        !h.dest.join(NAME).exists(),
+        "a wrong file never gets its final name"
+    );
+    assert_eq!(
+        part_files(&h.dest),
+        Vec::<String>::new(),
+        "the bad .part is deleted so a retry starts clean"
+    );
 }

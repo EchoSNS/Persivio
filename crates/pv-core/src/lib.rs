@@ -17,6 +17,7 @@
 
 pub mod checksum;
 pub mod event;
+pub mod filename;
 pub mod ids;
 pub mod progress;
 pub mod protocol;
@@ -31,7 +32,7 @@ pub use ids::{TaskId, UnixMillis};
 pub use progress::{Progress, ProgressSample, ProgressSink, SpeedMeter, eta_secs};
 pub use protocol::{
     CheckpointError, CheckpointSink, Outcome, Protocol, ProtocolError, RateLimiter,
-    ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, Unlimited,
+    ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, TorrentResume, Unlimited,
 };
 pub use settings::{Settings, SettingsError, TorrentSettings};
 pub use source::{Source, SourceError};

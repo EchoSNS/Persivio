@@ -26,6 +26,7 @@ use pv_core::{FailReason, Protocol, TaskState, TaskStateKind, UnixMillis};
 use pv_http::HttpProtocol;
 use pv_http::filename::{contained_path, part_name};
 use pv_store::{Store, StoredTask};
+use pv_torrent::TorrentProtocol;
 use tokio::sync::{broadcast, mpsc};
 
 pub use actor::PROGRESS_INTERVAL;
@@ -37,7 +38,7 @@ pub use handle::{EngineHandle, MoveDirection};
 pub struct EngineConfig {
     /// SQLite database file (created if missing).
     pub db_path: PathBuf,
-    /// Download protocols, tried in order. Defaults to HTTP.
+    /// Download protocols, tried in order. Defaults to HTTP and BitTorrent.
     pub protocols: Vec<Arc<dyn Protocol>>,
     /// Start queued tasks automatically. `false` lets a front end inspect or edit the
     /// queue (e.g. a CLI `list`) without downloading anything.
@@ -45,12 +46,12 @@ pub struct EngineConfig {
 }
 
 impl EngineConfig {
-    /// Defaults: HTTP protocol, autostart on.
+    /// Defaults: HTTP and BitTorrent protocols, autostart on.
     #[must_use]
     pub fn new(db_path: impl Into<PathBuf>) -> Self {
         Self {
             db_path: db_path.into(),
-            protocols: vec![Arc::new(HttpProtocol)],
+            protocols: vec![Arc::new(HttpProtocol), Arc::new(TorrentProtocol::new())],
             autostart: true,
         }
     }

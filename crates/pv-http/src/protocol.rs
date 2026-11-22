@@ -17,6 +17,7 @@ use crate::filename::{contained_path, part_name, resolve_filename, unique_name};
 use crate::probe::probe;
 use crate::segmented::{Segmented, SegmentedConfig, SegmentedOutcome, run_segmented};
 use crate::transfer::{Checkpointing, Transfer, TransferOutcome, finalize, run_single};
+use crate::verify::verify_file;
 
 /// How often a running transfer syncs and checkpoints (ADR-005).
 pub const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(1);
@@ -200,8 +201,19 @@ impl Run<'_> {
         }
     }
 
-    /// Atomic rename to a name that does not exist yet (ADR-008).
+    /// Optional checksum verification, then the atomic rename to a name that does not
+    /// exist yet (ADR-008). A mismatching `.part` is deleted, so a retry starts clean
+    /// instead of "resuming" a file that is complete but wrong.
     async fn finish(&self, name: &str, part: &std::path::Path) -> Result<Outcome, ProtocolError> {
+        if let Some(expected) = &self.ctx.task.spec.checksum {
+            self.ctx.events.phase(RunPhase::Verifying);
+            if let Err(e) = verify_file(part, expected).await {
+                if matches!(e, ProtocolError::ChecksumMismatch { .. }) {
+                    let _ = tokio::fs::remove_file(part).await;
+                }
+                return Err(e);
+            }
+        }
         let dest = &self.ctx.task.spec.dest_dir;
         let final_name = unique_name(dest, name).await?;
         let final_path = contained_path(dest, &final_name)?;

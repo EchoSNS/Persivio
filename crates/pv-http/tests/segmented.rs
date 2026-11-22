@@ -384,6 +384,7 @@ async fn file_changed_since_last_run_restarts_cleanly() {
 
     let url = s.url("/mutable/m.bin");
     let resume = ResumeState {
+        torrent: None,
         http: Some(HttpResumeInfo {
             final_url: Some(Url::parse(&url).unwrap()),
             etag: Some(old_etag),
@@ -435,6 +436,7 @@ async fn missing_part_file_restarts_instead_of_trusting_checkpoints() {
     let dir = tempfile::tempdir().unwrap();
     let url = s.url("/file/gone.bin");
     let resume = ResumeState {
+        torrent: None,
         http: Some(HttpResumeInfo {
             final_url: None,
             etag: Some(v),

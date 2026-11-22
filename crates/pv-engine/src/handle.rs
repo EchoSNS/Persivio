@@ -39,6 +39,11 @@ pub(crate) enum Command {
         direction: MoveDirection,
         reply: Reply<()>,
     },
+    SelectFiles {
+        id: TaskId,
+        files: Option<Vec<u32>>,
+        reply: Reply<()>,
+    },
     SetSettings(Box<Settings>, Reply<()>),
     GetSettings(Reply<Settings>),
     List(Reply<Vec<TaskSnapshot>>),
@@ -136,6 +141,20 @@ impl EngineHandle {
             reply,
         })
         .await
+    }
+
+    /// Chooses which files of a torrent to download (`None` = all). A running torrent
+    /// restarts with the new selection; pieces already on disk are kept.
+    ///
+    /// # Errors
+    /// Unknown task, not a torrent, persistence failure, or a stopped engine.
+    pub async fn select_files(
+        &self,
+        id: TaskId,
+        files: Option<Vec<u32>>,
+    ) -> Result<(), EngineError> {
+        self.call(|reply| Command::SelectFiles { id, files, reply })
+            .await
     }
 
     /// Validates, persists and applies new settings (limits apply immediately).

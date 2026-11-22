@@ -14,12 +14,14 @@ governor = { workspace = true }
 pv-core = { workspace = true }
 pv-http = { workspace = true }
 pv-store = { workspace = true }
+pv-torrent = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "fs"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+pv-torrent = { workspace = true, features = ["testing"] }
 pv-testkit = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread"] }

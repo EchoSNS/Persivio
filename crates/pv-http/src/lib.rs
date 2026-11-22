@@ -14,6 +14,7 @@ pub mod probe;
 pub mod protocol;
 pub mod segmented;
 pub mod transfer;
+pub mod verify;
 
 pub use client::{ClientConfig, DownloadRequest, HttpClient, MAX_REDIRECTS};
 pub use content_range::{ContentRange, ContentRangeError, parse_content_range};

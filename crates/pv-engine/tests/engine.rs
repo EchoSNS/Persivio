@@ -478,7 +478,10 @@ async fn queue_order_can_be_changed() {
 #[tokio::test]
 async fn invalid_requests_are_rejected() {
     let env = Env::new();
-    let e = env.engine().await;
+    // HTTP-only engine: also checks that dispatch rejects sources no protocol handles.
+    let mut config = EngineConfig::new(env.db());
+    config.protocols = vec![std::sync::Arc::new(pv_http::HttpProtocol)];
+    let e = Engine::start(config).await.unwrap();
     let unknown = TaskId::new();
     assert!(matches!(
         e.pause(unknown).await,
@@ -497,7 +500,7 @@ async fn invalid_requests_are_rejected() {
     );
     assert!(
         matches!(e.add(magnet).await, Err(EngineError::NoProtocol)),
-        "torrents arrive in Phase 6"
+        "no registered protocol handles magnets"
     );
     let bad = Settings {
         max_concurrent_tasks: 0,

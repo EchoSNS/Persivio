@@ -21,6 +21,9 @@ pub enum EngineError {
     /// The settings are invalid.
     #[error(transparent)]
     Settings(#[from] SettingsError),
+    /// The operation only applies to torrents.
+    #[error("task {0} is not a torrent")]
+    NotATorrent(TaskId),
     /// No registered protocol handles this source.
     #[error("no protocol can download this source")]
     NoProtocol,

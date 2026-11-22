@@ -78,6 +78,9 @@ pub struct TaskSpec {
     /// Category label (e.g. "Video") used for filtering and destination rules.
     #[serde(default)]
     pub category: Option<String>,
+    /// Torrents: indexes of the files to download; `None` = all files.
+    #[serde(default)]
+    pub selected_files: Option<Vec<u32>>,
 }
 
 /// Why a [`TaskSpec`] is invalid.
@@ -112,6 +115,7 @@ impl TaskSpec {
             speed_limit_bps: None,
             checksum: None,
             category: None,
+            selected_files: None,
         }
     }
 

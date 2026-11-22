@@ -32,6 +32,9 @@ pub trait Protocol: Send + Sync {
     /// Must return promptly after cancellation, having flushed and checkpointed what it
     /// wrote (ADR-005). Pause vs. cancel is decided by the engine, not the protocol.
     async fn run(&self, ctx: RunContext) -> Result<Outcome, ProtocolError>;
+
+    /// Releases shared resources (sockets, sessions) at engine shutdown. Default: nothing.
+    async fn shutdown(&self) {}
 }
 
 /// How a run ended without error.
@@ -121,6 +124,16 @@ pub trait CheckpointSink: Send + Sync {
         id: TaskId,
         progress: &[(u32, u64)],
     ) -> Result<(), CheckpointError>;
+
+    /// Stores resolved torrent metadata. The default does nothing (HTTP-only sinks).
+    async fn save_torrent(
+        &self,
+        _id: TaskId,
+        _info_hash: &str,
+        _torrent_bytes: &[u8],
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
 }
 
 /// A byte-rate limiter shared by all workers of a task (and globally).
@@ -140,6 +153,15 @@ impl RateLimiter for Unlimited {
     async fn acquire(&self, _bytes: u64) {}
 }
 
+/// Persisted torrent metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TorrentResume {
+    /// Hex info hash.
+    pub info_hash: String,
+    /// The bencoded `.torrent` (metainfo) bytes.
+    pub torrent_bytes: Vec<u8>,
+}
+
 /// Where a resumed run picks up.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ResumeState {
@@ -147,6 +169,8 @@ pub struct ResumeState {
     pub http: Option<HttpResumeInfo>,
     /// Persisted segment table (empty for a fresh start).
     pub segments: Vec<Segment>,
+    /// Torrent metadata from a previous run (so magnets need no second metadata fetch).
+    pub torrent: Option<TorrentResume>,
 }
 
 /// Everything a protocol run receives from the engine.

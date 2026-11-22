@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use pv_core::{
     EngineEvent, FailReason, Outcome, Progress, ProgressSink, Protocol, ProtocolError,
     ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, Settings, SpeedMeter, TaskId,
-    TaskSnapshot, TaskState, TaskStateKind, UnixMillis, transition,
+    TaskKind, TaskSnapshot, TaskState, TaskStateKind, TorrentResume, UnixMillis, transition,
 };
 use pv_http::filename::{contained_path, part_name};
 use pv_store::Store;
@@ -38,7 +38,11 @@ pub(crate) enum Internal {
 enum Stop {
     Pause,
     Cancel,
-    Remove { delete_files: bool },
+    Remove {
+        delete_files: bool,
+    },
+    /// Re-run with changed parameters (e.g. a new torrent file selection).
+    Restart,
     Shutdown,
 }
 
@@ -159,6 +163,9 @@ impl Actor {
                 Ok(None) | Err(_) => break,
             }
         }
+        for protocol in &self.protocols {
+            protocol.shutdown().await;
+        }
         self.store.close().await;
     }
 
@@ -222,6 +229,14 @@ impl Actor {
             }
             Command::SetSettings(settings, r) => {
                 let result = self.set_settings(*settings).await;
+                reply(r, result);
+            }
+            Command::SelectFiles {
+                id,
+                files,
+                reply: r,
+            } => {
+                let result = self.select_files(id, files).await;
                 reply(r, result);
             }
             Command::GetSettings(r) => reply(r, Ok((*self.settings).clone())),
@@ -335,6 +350,14 @@ impl Actor {
             resume: ResumeState {
                 http: (stored.http != pv_core::HttpResumeInfo::default()).then_some(stored.http),
                 segments: stored.segments,
+                torrent: self
+                    .store
+                    .torrent_state(id)
+                    .await?
+                    .map(|(info_hash, torrent_bytes)| TorrentResume {
+                        info_hash,
+                        torrent_bytes,
+                    }),
             },
             settings: self.settings.clone(),
             cancel: cancel.clone(),
@@ -416,11 +439,7 @@ impl Actor {
             && self.kind(id) == Some(TaskStateKind::Completed)
             && let Some(path) = self.final_path(id)
         {
-            match tokio::fs::remove_file(&path).await {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e.into()),
-            }
+            remove_path(&path).await?;
         }
         self.store.delete_task(id).await?;
         self.tasks.remove(&id);
@@ -436,6 +455,8 @@ impl Actor {
         contained_path(&task.spec.dest_dir, name).ok()
     }
 
+    /// Deletes an unfinished task's partial data: the `.part` file (HTTP) or the
+    /// torrent's file/folder (whose name was made unique for this task at start).
     async fn delete_part(&self, id: TaskId) {
         let Some(task) = self.tasks.get(&id) else {
             return;
@@ -443,9 +464,51 @@ impl Actor {
         let Some(name) = task.spec.file_name.as_deref() else {
             return;
         };
-        if let Ok(part) = contained_path(&task.spec.dest_dir, &part_name(name)) {
-            let _ = tokio::fs::remove_file(part).await;
+        let partial = match task.kind() {
+            TaskKind::Http => contained_path(&task.spec.dest_dir, &part_name(name)),
+            TaskKind::Torrent if task.state != TaskState::Completed => {
+                contained_path(&task.spec.dest_dir, name)
+            }
+            TaskKind::Torrent => return,
+        };
+        if let Ok(path) = partial
+            && let Err(e) = remove_path(&path).await
+        {
+            tracing::warn!(%id, %e, "could not delete partial data");
         }
+    }
+
+    async fn select_files(
+        &mut self,
+        id: TaskId,
+        files: Option<Vec<u32>>,
+    ) -> Result<(), EngineError> {
+        let task = self.tasks.get(&id).ok_or(EngineError::NotFound(id))?;
+        if task.kind() != TaskKind::Torrent {
+            return Err(EngineError::NotATorrent(id));
+        }
+        self.store.set_selected_files(id, files.as_deref()).await?;
+        if let Some(task) = self.tasks.get_mut(&id) {
+            task.spec.selected_files = files;
+        }
+        if let Some(running) = self.running.get_mut(&id) {
+            running.stop = Some(Stop::Restart);
+            running.cancel.cancel();
+        }
+        Ok(())
+    }
+
+    /// Puts a task back at the front of the queue (used after a restart request).
+    async fn requeue_front(&mut self, id: TaskId) -> Result<(), EngineError> {
+        if !self
+            .kind(id)
+            .is_some_and(|k| k.can_transition_to(TaskStateKind::Queued))
+        {
+            self.set_state(id, TaskState::Paused).await?;
+        }
+        self.set_state(id, TaskState::Queued).await?;
+        self.queue.push_front(id);
+        Ok(())
     }
 
     async fn move_task(&mut self, id: TaskId, direction: MoveDirection) -> Result<(), EngineError> {
@@ -544,6 +607,7 @@ impl Actor {
         let outcome = match (result, running.stop) {
             (_, Some(Stop::Shutdown)) => Ok(()), // state kept for recovery
             (_, Some(Stop::Remove { delete_files })) => self.remove_now(id, delete_files).await,
+            (_, Some(Stop::Restart)) => self.requeue_front(id).await,
             (Ok(Outcome::Completed { path }), _) => self.complete(id, &path).await,
             (Ok(Outcome::Stopped) | Err(_), Some(Stop::Cancel)) => {
                 let r = self.set_state(id, TaskState::Cancelled).await;
@@ -614,3 +678,16 @@ fn reply<T>(r: Reply<T>, result: Result<T, EngineError>) {
 
 /// `Shutdown` is handled in the main loop before dispatch.
 const fn unreachable_shutdown() {}
+
+/// Deletes a file, or a folder with its contents. Missing paths are fine.
+async fn remove_path(path: &std::path::Path) -> std::io::Result<()> {
+    let result = match tokio::fs::symlink_metadata(path).await {
+        Ok(meta) if meta.is_dir() => tokio::fs::remove_dir_all(path).await,
+        Ok(_) => tokio::fs::remove_file(path).await,
+        Err(e) => Err(e),
+    };
+    match result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        other => other,
+    }
+}

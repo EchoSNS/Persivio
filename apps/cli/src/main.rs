@@ -37,7 +37,7 @@ struct Cli {
 enum Command {
     /// Add downloads and run them (unless --no-wait).
     Add {
-        /// One or more http(s) URLs.
+        /// http(s) URLs, magnet links, or paths to .torrent files.
         #[arg(required = true)]
         urls: Vec<String>,
         /// Destination directory (default: settings, then your Downloads folder).
@@ -165,8 +165,7 @@ async fn run(engine: &EngineHandle, command: Command) -> Result<()> {
                 None => default_download_dir(engine).await?,
             };
             for raw in &urls {
-                let url = Url::parse(raw).with_context(|| format!("invalid URL `{raw}`"))?;
-                let source = Source::http(url)?;
+                let source = parse_source(raw)?;
                 let mut spec = TaskSpec::new(source, &dest);
                 spec.file_name.clone_from(&name);
                 spec.connections = connections;
@@ -349,5 +348,60 @@ mod tests {
                 .to_string()
                 .contains("matches 3")
         );
+    }
+}
+
+/// Turns a command-line argument into a download source: a magnet link, a path to an
+/// existing `.torrent` file, or an http(s) URL.
+fn parse_source(raw: &str) -> Result<Source> {
+    if raw
+        .get(..7)
+        .is_some_and(|p| p.eq_ignore_ascii_case("magnet:"))
+    {
+        return Ok(Source::magnet(raw)?);
+    }
+    let path = Path::new(raw);
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("torrent"))
+        && path.is_file()
+    {
+        let bytes = std::fs::read(path).with_context(|| format!("cannot read {raw}"))?;
+        let source = Source::TorrentFile { bytes };
+        source.validate()?;
+        return Ok(source);
+    }
+    let url = Url::parse(raw)
+        .with_context(|| format!("`{raw}` is not a URL, magnet link or .torrent file"))?;
+    Ok(Source::http(url)?)
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+
+    #[test]
+    fn arguments_become_the_right_source() {
+        assert!(matches!(
+            parse_source("https://e.x/a.iso").unwrap(),
+            Source::Http { .. }
+        ));
+        assert!(matches!(
+            parse_source("MAGNET:?xt=urn:btih:abc").unwrap(),
+            Source::Magnet { .. }
+        ));
+        let dir = tempfile::tempdir().unwrap();
+        let t = dir.path().join("x.Torrent");
+        std::fs::write(&t, b"d4:infodee").unwrap();
+        assert!(matches!(
+            parse_source(t.to_str().unwrap()).unwrap(),
+            Source::TorrentFile { .. }
+        ));
+        let err = parse_source("not a thing").unwrap_err().to_string();
+        assert!(
+            err.contains("not a URL, magnet link or .torrent file"),
+            "{err}"
+        );
+        assert!(parse_source("ftp://e.x/f").is_err(), "only http(s) URLs");
     }
 }

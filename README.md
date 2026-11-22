@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 5 — a working headless download manager: queue, speed limits, crash recovery and a CLI.
+> **Status:** Phase 6 — HTTP and BitTorrent (magnet / .torrent) downloads with queue, limits, recovery and a CLI.
 
 ## Layout
 
@@ -41,6 +41,7 @@ cargo run -p persivio-cli -- --help
 
 ```sh
 persivio add https://example.com/file.iso            # add and download, with progress bars
+persivio add "magnet:?xt=urn:btih:..."  ./x.torrent  # magnet links and .torrent files too
 persivio add URL1 URL2 --dir D:/ISOs -c 8 --no-wait  # only queue
 persivio list                                          # all downloads and their state
 persivio pause <id|all>     persivio resume <id|all>

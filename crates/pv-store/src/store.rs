@@ -98,8 +98,8 @@ impl Store {
         sqlx::query(
             "INSERT INTO tasks (id, kind, source_json, dest_dir, file_name, state, fail_reason,
                                 total_size, connections, speed_limit, checksum_json, category,
-                                created_at, updated_at, completed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                created_at, updated_at, completed_at, selected_files_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(task.id.to_string())
         .bind(task.kind().as_str())
@@ -121,6 +121,12 @@ impl Store {
         .bind(task.created_at.0)
         .bind(task.updated_at.0)
         .bind(task.completed_at.map(|t| t.0))
+        .bind(
+            spec.selected_files
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+        )
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -259,6 +265,66 @@ impl Store {
             .execute(&self.pool)
             .await?;
         not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Sets a torrent's file selection (`None` = all files).
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if the task does not exist.
+    pub async fn set_selected_files(
+        &self,
+        id: TaskId,
+        files: Option<&[u32]>,
+    ) -> Result<(), StoreError> {
+        let json = files.map(serde_json::to_string).transpose()?;
+        let result = sqlx::query("UPDATE tasks SET selected_files_json = ? WHERE id = ?")
+            .bind(json)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Stores (or replaces) a torrent's resolved metadata: info hash and `.torrent` bytes.
+    ///
+    /// # Errors
+    /// Database errors (including an unknown task: foreign key).
+    pub async fn save_torrent_state(
+        &self,
+        id: TaskId,
+        info_hash: &str,
+        torrent_bytes: &[u8],
+    ) -> Result<(), StoreError> {
+        sqlx::query(
+            "INSERT INTO torrent_state (task_id, info_hash, resume_blob) VALUES (?, ?, ?)
+             ON CONFLICT (task_id) DO UPDATE SET info_hash = excluded.info_hash,
+                                                 resume_blob = excluded.resume_blob",
+        )
+        .bind(id.to_string())
+        .bind(info_hash)
+        .bind(torrent_bytes)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Loads a torrent's metadata: `(info_hash, torrent_bytes)`.
+    ///
+    /// # Errors
+    /// Database errors.
+    pub async fn torrent_state(&self, id: TaskId) -> Result<Option<(String, Vec<u8>)>, StoreError> {
+        let row = sqlx::query("SELECT info_hash, resume_blob FROM torrent_state WHERE task_id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        row.map(|r| -> Result<_, StoreError> {
+            Ok((
+                r.try_get("info_hash")?,
+                r.try_get::<Option<Vec<u8>>, _>("resume_blob")?
+                    .unwrap_or_default(),
+            ))
+        })
+        .transpose()
     }
 
     /// Persists manual queue positions for many tasks in one transaction.
@@ -443,6 +509,17 @@ impl CheckpointSink for Store {
             .await
             .map_err(|e| CheckpointError(e.to_string()))
     }
+
+    async fn save_torrent(
+        &self,
+        id: TaskId,
+        info_hash: &str,
+        torrent_bytes: &[u8],
+    ) -> Result<(), CheckpointError> {
+        self.save_torrent_state(id, info_hash, torrent_bytes)
+            .await
+            .map_err(|e| CheckpointError(e.to_string()))
+    }
 }
 
 fn not_found_if_zero(rows: u64, id: TaskId) -> Result<(), StoreError> {
@@ -538,6 +615,10 @@ fn task_from_row(row: &SqliteRow, segments: Vec<Segment>) -> Result<StoredTask, 
         speed_limit_bps: opt_to_u64(row.try_get("speed_limit")?, "tasks.speed_limit")?,
         checksum,
         category: row.try_get("category")?,
+        selected_files: row
+            .try_get::<Option<String>, _>("selected_files_json")?
+            .map(|j| serde_json::from_str(&j))
+            .transpose()?,
     };
 
     let snapshot = TaskSnapshot {

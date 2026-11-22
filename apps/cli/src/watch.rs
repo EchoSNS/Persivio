@@ -88,8 +88,11 @@ pub async fn watch(engine: &EngineHandle) -> Result<()> {
     }
 }
 
+/// Tasks `watch` waits for. Seeding is excluded: it has no natural end, so the command
+/// exits once every download is done (seeding torrents resume on the next run).
 fn is_active(state: &TaskState) -> bool {
-    state.kind() == TaskStateKind::Queued || state.kind().is_running()
+    let kind = state.kind();
+    kind == TaskStateKind::Queued || (kind.is_running() && kind != TaskStateKind::Seeding)
 }
 
 fn add_bar(multi: &MultiProgress, t: &TaskSnapshot) -> ProgressBar {
@@ -107,6 +110,7 @@ fn finish_or_label(bar: &ProgressBar, state: &TaskState) {
         TaskState::Failed { reason, .. } => bar.abandon_with_message(format!("failed: {reason}")),
         TaskState::Cancelled => bar.abandon_with_message("cancelled"),
         TaskState::Paused => bar.abandon_with_message("paused"),
+        TaskState::Seeding => bar.finish_with_message("downloaded, seeding"),
         other => bar.set_message(other.kind().to_string()),
     }
 }

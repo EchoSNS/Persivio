@@ -550,3 +550,55 @@ async fn file_name_can_be_updated() {
         Err(StoreError::NotFound(_))
     ));
 }
+
+#[tokio::test]
+async fn torrent_state_and_file_selection_round_trip() {
+    let (_dir, store) = open_temp().await;
+    let mut spec = TaskSpec::new(Source::magnet("magnet:?xt=urn:btih:abc").unwrap(), dest());
+    spec.selected_files = Some(vec![0, 2]);
+    let task = TaskSnapshot::new(spec);
+    store.insert_task(&task).await.unwrap();
+    assert_eq!(
+        store.get_task(task.id).await.unwrap().unwrap().snapshot,
+        task
+    );
+
+    store.set_selected_files(task.id, Some(&[1])).await.unwrap();
+    let loaded = store.get_task(task.id).await.unwrap().unwrap();
+    assert_eq!(loaded.snapshot.spec.selected_files, Some(vec![1]));
+    store.set_selected_files(task.id, None).await.unwrap();
+    assert_eq!(
+        store
+            .get_task(task.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .spec
+            .selected_files,
+        None
+    );
+
+    assert_eq!(store.torrent_state(task.id).await.unwrap(), None);
+    let sink: &dyn CheckpointSink = &store;
+    sink.save_torrent(task.id, "aa", b"d4:infod...e")
+        .await
+        .unwrap();
+    store
+        .save_torrent_state(task.id, "bb", b"v2")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.torrent_state(task.id).await.unwrap(),
+        Some(("bb".into(), b"v2".to_vec()))
+    );
+    assert!(
+        store
+            .save_torrent_state(TaskId::new(), "x", b"y")
+            .await
+            .is_err(),
+        "foreign key"
+    );
+    store.delete_task(task.id).await.unwrap();
+    assert_eq!(store.torrent_state(task.id).await.unwrap(), None, "cascade");
+}
