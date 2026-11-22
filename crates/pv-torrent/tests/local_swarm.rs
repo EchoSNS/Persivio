@@ -153,11 +153,15 @@ async fn torrent_file_single_file_downloads_exactly() {
     protocol.stop().await;
 }
 
+/// Sizes are multiples of the 16 KiB piece length, so no piece spans two files: in
+/// BitTorrent a piece shared with a selected file is downloaded whole, which would
+/// otherwise complete small unselected neighbours (seen on macOS, whose file system
+/// orders the files differently).
 fn make_pack(root: &Path) -> Vec<Fixture> {
     let files = vec![
-        Fixture::random("a.bin", 300_000, 2),
-        Fixture::random("b.bin", 450_000, 3),
-        Fixture::random("c.txt", 12_345, 4),
+        Fixture::random("a.bin", 18 * 16_384, 2),
+        Fixture::random("b.bin", 28 * 16_384, 3),
+        Fixture::random("c.txt", 2 * 16_384, 4),
     ];
     std::fs::create_dir_all(root.join("sub")).unwrap();
     std::fs::write(root.join("a.bin"), &files[0].bytes).unwrap();
@@ -244,7 +248,7 @@ async fn only_selected_files_are_downloaded() {
     let meta = r.events.meta.lock().unwrap()[0].clone();
     assert_eq!(
         meta.total_size,
-        Some(450_000),
+        Some(28 * 16_384),
         "total counts only selected files"
     );
     assert!(meta.files.iter().all(|f| f.selected == (f.index == b)));
@@ -253,10 +257,7 @@ async fn only_selected_files_are_downloaded() {
             pv_testkit::sha256_hex(&d) == files[if *n == "a.bin" { 0 } else { 2 }].sha256
         })
     });
-    assert!(
-        !others_complete,
-        "unselected files were not fully downloaded"
-    );
+    assert!(!others_complete, "an unselected file was downloaded");
     protocol.stop().await;
 }
 
