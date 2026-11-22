@@ -19,6 +19,8 @@ Tauri v2 + Svelte 5 desktop UI.
 | `apps/cli` | Headless `persivio` CLI |
 | `docs/` | [Architecture](docs/architecture.md), [ADRs](docs/adr/) |
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project rules and the definition of done.
+
 ## Prerequisites
 
 - Rust via [rustup](https://rustup.rs) (the `rust-toolchain.toml` selects stable + rustfmt + clippy)
