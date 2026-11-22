@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 3 — single-connection HTTP downloads with probe, safe file naming and resume.
+> **Status:** Phase 4 — multi-connection segmented HTTP downloads with work stealing, durable checkpoints and resume.
 
 ## Layout
 

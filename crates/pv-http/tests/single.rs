@@ -411,7 +411,8 @@ async fn cancel_and_resume_continue_from_the_checkpoint() {
     assert_eq!(reqs.len(), 1, "no new probe on resume");
     assert_eq!(
         reqs[0].header("range"),
-        Some(format!("bytes={durable}-").as_str())
+        Some(format!("bytes={durable}-399999").as_str()),
+        "resume starts exactly at the checkpoint (segment requests name their end)"
     );
     assert_eq!(
         reqs[0].header("if-range"),

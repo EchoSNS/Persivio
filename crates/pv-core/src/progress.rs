@@ -269,3 +269,101 @@ mod tests {
         assert_eq!(serde_json::from_str::<Progress>(&json).unwrap(), p);
     }
 }
+
+/// Smoothed transfer speed: an exponentially weighted moving average (EWMA) of
+/// per-sample rates, fed every ~250 ms by the engine ticker.
+///
+/// A raw "bytes in the last tick" rate jumps around wildly (TCP bursts, chunk sizes);
+/// the EWMA gives the UI a stable number while still reacting within about a second.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpeedMeter {
+    alpha: f64,
+    last_bytes: Option<u64>,
+    rate: f64,
+}
+
+impl Default for SpeedMeter {
+    fn default() -> Self {
+        Self::new(0.3)
+    }
+}
+
+impl SpeedMeter {
+    /// `alpha` in `(0, 1]`: weight of the newest sample (higher = more reactive).
+    #[must_use]
+    pub const fn new(alpha: f64) -> Self {
+        Self {
+            alpha,
+            last_bytes: None,
+            rate: 0.0,
+        }
+    }
+
+    /// Records the cumulative byte count after `elapsed` since the previous sample and
+    /// returns the smoothed speed in bytes/second. The first sample only sets a baseline.
+    pub fn sample(&mut self, total_bytes: u64, elapsed: std::time::Duration) -> u64 {
+        if let Some(last) = self.last_bytes {
+            let secs = elapsed.as_secs_f64();
+            if secs > 0.0 {
+                // A counter reset (restart from zero) counts as no progress.
+                let delta = total_bytes.saturating_sub(last);
+                #[allow(clippy::cast_precision_loss, reason = "rates need no 53-bit precision")]
+                let instant = delta as f64 / secs;
+                self.rate = self.alpha.mul_add(instant, (1.0 - self.alpha) * self.rate);
+            }
+        }
+        self.last_bytes = Some(total_bytes);
+        self.bps()
+    }
+
+    /// Current smoothed speed in bytes/second.
+    #[must_use]
+    pub fn bps(&self) -> u64 {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "rate is finite and non-negative; saturating float->int cast"
+        )]
+        let bps = self.rate.round() as u64;
+        bps
+    }
+}
+
+#[cfg(test)]
+mod speed_tests {
+    use std::time::Duration;
+
+    use super::SpeedMeter;
+
+    const TICK: Duration = Duration::from_millis(250);
+
+    #[test]
+    fn converges_to_a_steady_rate() {
+        let mut m = SpeedMeter::default();
+        assert_eq!(m.sample(0, TICK), 0, "first sample is only a baseline");
+        let mut total = 0;
+        for _ in 0..40 {
+            total += 250_000; // 1 MB/s
+            m.sample(total, TICK);
+        }
+        assert!((990_000..=1_010_000).contains(&m.bps()), "{}", m.bps());
+    }
+
+    #[test]
+    fn smooths_bursts_and_handles_edge_cases() {
+        let mut m = SpeedMeter::new(0.3);
+        m.sample(0, TICK);
+        let after_burst = m.sample(1_000_000, TICK); // instant 4 MB/s
+        assert_eq!(after_burst, 1_200_000, "only alpha of the spike shows");
+        assert_eq!(
+            m.sample(1_000_000, Duration::ZERO),
+            1_200_000,
+            "zero dt ignored"
+        );
+        assert!(
+            m.sample(0, TICK) < 1_200_000,
+            "a counter reset decays, never negative"
+        );
+        assert_eq!(SpeedMeter::default(), SpeedMeter::new(0.3));
+    }
+}

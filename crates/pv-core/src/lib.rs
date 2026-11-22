@@ -28,7 +28,7 @@ pub mod task;
 pub use checksum::{Checksum, ChecksumAlgorithm, ChecksumError};
 pub use event::EngineEvent;
 pub use ids::{TaskId, UnixMillis};
-pub use progress::{Progress, ProgressSample, ProgressSink, eta_secs};
+pub use progress::{Progress, ProgressSample, ProgressSink, SpeedMeter, eta_secs};
 pub use protocol::{
     CheckpointError, CheckpointSink, Outcome, Protocol, ProtocolError, RateLimiter,
     ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, Unlimited,
