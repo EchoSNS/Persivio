@@ -58,7 +58,8 @@ reqwest = { version = "0.13.5", default-features = false }
 # Disk
 fs4 = "1.1.0"
 directories = "6.0.0"
-governor = "0.10.4"
+# std clock (std::time::Instant): the default `quanta` TSC clock ran ~2x slow on macOS CI VMs.
+governor = { version = "0.10.4", default-features = false, features = ["std"] }
 indicatif = "0.18.6"
 
 # Hashing / compression
