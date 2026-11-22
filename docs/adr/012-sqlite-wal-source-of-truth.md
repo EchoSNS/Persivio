@@ -9,7 +9,7 @@ inspectable for debugging, and be updated frequently (checkpoints) without block
 
 ## Decision
 Persist everything in one SQLite database via `sqlx` with migrations, in WAL journal mode with
-foreign keys enabled. `mp-store` is the only crate that touches it. In-memory engine state is a
+foreign keys enabled. `pv-store` is the only crate that touches it. In-memory engine state is a
 cache rebuilt from the DB at startup.
 
 ## Consequences

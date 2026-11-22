@@ -964,14 +964,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "millipede-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "mp-engine",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -997,62 +989,6 @@ dependencies = [
  "wasi",
  "windows-sys",
 ]
-
-[[package]]
-name = "mp-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "mp-engine"
-version = "0.1.0"
-
-[[package]]
-name = "mp-http"
-version = "0.1.0"
-
-[[package]]
-name = "mp-store"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "mp-core",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "thiserror",
- "tokio",
- "url",
-]
-
-[[package]]
-name = "mp-testkit"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "flate2",
- "futures",
- "reqwest",
- "sha2",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "mp-torrent"
-version = "0.1.0"
 
 [[package]]
 name = "num-traits"
@@ -1129,6 +1065,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "persivio-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "pv-engine",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1157,6 +1101,62 @@ checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
 ]
+
+[[package]]
+name = "pv-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "pv-engine"
+version = "0.1.0"
+
+[[package]]
+name = "pv-http"
+version = "0.1.0"
+
+[[package]]
+name = "pv-store"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "pv-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "pv-testkit"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "flate2",
+ "futures",
+ "reqwest",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pv-torrent"
+version = "0.1.0"
 
 [[package]]
 name = "quote"

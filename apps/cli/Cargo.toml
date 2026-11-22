@@ -1,18 +1,19 @@
 [package]
-name = "millipede-cli"
-description = "Headless command-line client for the Millipede download engine"
+name = "persivio-cli"
+description = "Headless command-line client for the Persivio download engine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "millipede"
+name = "persivio"
 path = "src/main.rs"
 
 [dependencies]
-mp-engine = { workspace = true }
+pv-engine = { workspace = true }
 clap = { workspace = true }
 
 [lints]

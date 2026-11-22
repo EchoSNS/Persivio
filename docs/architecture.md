@@ -1,6 +1,6 @@
-# Millipede architecture
+# Persivio architecture
 
-Millipede is a desktop download manager: a UI-agnostic Rust engine (multi-connection HTTP and
+Persivio is a desktop download manager: a UI-agnostic Rust engine (multi-connection HTTP and
 BitTorrent) driven by a Tauri v2 + Svelte 5 desktop app or a headless CLI. This document is the
 map; the *why* behind each choice lives in [`adr/`](adr/).
 
@@ -18,13 +18,13 @@ map; the *why* behind each choice lives in [`adr/`](adr/).
 └───────────────────────────────▲─────────────────────────┬──────────────┘
                                 │ EngineEvent (broadcast)  │ EngineHandle (mpsc)
 ┌───────────────────────────────┴─────────────────────────▼──────────────┐
-│ mp-engine  — actor: queue, scheduler, state machine, limits, recovery  │
+│ pv-engine  — actor: queue, scheduler, state machine, limits, recovery  │
 │      │                     │                      │                     │
 │      ▼                     ▼                      ▼                     │
-│ mp-http (Protocol)    mp-torrent (Protocol)   mp-store (SQLite)         │
+│ pv-http (Protocol)    pv-torrent (Protocol)   pv-store (SQLite)         │
 │  probe/segments/       librqbit adapter        tasks/segments/settings  │
 │  writer/retry                                                           │
-│                    mp-core: domain types, traits, errors, events        │
+│                    pv-core: domain types, traits, errors, events        │
 └────────────────────────────────────────────────────────────────────────┘
           ▲
           │ also used by
@@ -35,10 +35,10 @@ map; the *why* behind each choice lives in [`adr/`](adr/).
 |---|---|---|
 | Frontend | Render state; send commands | Hold authoritative state |
 | `src-tauri` | Map IPC ↔ `EngineHandle`, forward events, OS integration | Contain download logic |
-| `mp-engine` | Own all task state (actor), schedule, rate-limit, persist, recover | Know about any UI |
-| `mp-http` / `mp-torrent` | Implement the `Protocol` trait for one source type | Touch the DB directly |
-| `mp-store` | The only code that talks to SQLite | Contain business rules |
-| `mp-core` | Types, traits, errors, events, the state-transition function | Do I/O or spawn tasks |
+| `pv-engine` | Own all task state (actor), schedule, rate-limit, persist, recover | Know about any UI |
+| `pv-http` / `pv-torrent` | Implement the `Protocol` trait for one source type | Touch the DB directly |
+| `pv-store` | The only code that talks to SQLite | Contain business rules |
+| `pv-core` | Types, traits, errors, events, the state-transition function | Do I/O or spawn tasks |
 
 ## Crate dependency graph (target)
 
@@ -48,11 +48,11 @@ this graph:
 
 ```
 apps/cli ─┐
-apps/desktop/src-tauri ─┴─► mp-engine ─► mp-http ────► mp-core
-                                       ├► mp-torrent ─► mp-core   (only crate using librqbit)
-                                       ├► mp-store ───► mp-core   (only crate using sqlx)
-                                       └► mp-core
-mp-testkit: dev-dependency only, never in shipped binaries
+apps/desktop/src-tauri ─┴─► pv-engine ─► pv-http ────► pv-core
+                                       ├► pv-torrent ─► pv-core   (only crate using librqbit)
+                                       ├► pv-store ───► pv-core   (only crate using sqlx)
+                                       └► pv-core
+pv-testkit: dev-dependency only, never in shipped binaries
 ```
 
 ## Key flows
@@ -61,7 +61,7 @@ mp-testkit: dev-dependency only, never in shipped binaries
 1. UI → `add_download` command → `EngineHandle::add(spec)`.
 2. Engine persists the task as `Queued`, emits `TaskAdded`.
 3. Scheduler acquires a concurrency permit → `Probing`.
-4. `mp-http` probes → plans segments → persists segments → `Downloading`.
+4. `pv-http` probes → plans segments → persists segments → `Downloading`.
 5. Segment workers stream bytes → the single per-task writer writes at offsets → progress atomics.
 6. A 250 ms ticker emits `ProgressBatch`; a 1–2 s checkpointer runs `sync_data` **then** persists
    segment progress (ADR-005).

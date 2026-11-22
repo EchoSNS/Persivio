@@ -9,7 +9,7 @@ Sharing it behind locks across the UI layer couples the engine to Tauri and invi
 bugs. We also want a CLI and automated tests that drive the engine without any UI.
 
 ## Decision
-`mp-engine` runs as an actor: a single task owns all task state. Front ends hold a cloneable
+`pv-engine` runs as an actor: a single task owns all task state. Front ends hold a cloneable
 `EngineHandle` that sends commands over an `mpsc` channel (with `oneshot` replies) and subscribe
 to `EngineEvent`s via a `broadcast` channel. The engine has no dependency on Tauri.
 

@@ -1,4 +1,4 @@
-# Millipede
+# Persivio
 
 A desktop download manager: a Rust engine with multi-connection segmented HTTP downloads,
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
@@ -10,13 +10,13 @@ Tauri v2 + Svelte 5 desktop UI.
 
 | Path | Purpose |
 |---|---|
-| `crates/mp-core` | Domain types, traits, events, errors (no I/O) |
-| `crates/mp-http` | HTTP protocol: probe, segments, writer, retry |
-| `crates/mp-torrent` | BitTorrent adapter over librqbit |
-| `crates/mp-store` | SQLite persistence (sqlx) |
-| `crates/mp-engine` | Engine actor: queue, scheduler, limits, recovery |
-| `crates/mp-testkit` | Test servers and fixtures (dev-only) |
-| `apps/cli` | Headless `millipede` CLI |
+| `crates/pv-core` | Domain types, traits, events, errors (no I/O) |
+| `crates/pv-http` | HTTP protocol: probe, segments, writer, retry |
+| `crates/pv-torrent` | BitTorrent adapter over librqbit |
+| `crates/pv-store` | SQLite persistence (sqlx) |
+| `crates/pv-engine` | Engine actor: queue, scheduler, limits, recovery |
+| `crates/pv-testkit` | Test servers and fixtures (dev-only) |
+| `apps/cli` | Headless `persivio` CLI |
 | `docs/` | [Architecture](docs/architecture.md), [ADRs](docs/adr/) |
 
 ## Prerequisites
@@ -32,7 +32,7 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace
 cargo deny check
-cargo run -p millipede-cli -- --help
+cargo run -p persivio-cli -- --help
 ```
 
 ## License

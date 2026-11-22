@@ -1,4 +1,4 @@
-//! `millipede` — headless debug/dev client that runs the engine in-process.
+//! `persivio` — headless debug/dev client that runs the engine in-process.
 //!
 //! Subcommands (`add`, `list`, `pause`, `resume`, `cancel`, `rm`, `watch`,
 //! `settings`) arrive in Phase 5 (with `anyhow` for error reporting); for now this
@@ -9,18 +9,18 @@ use clap::Parser;
 /// Command-line interface definition.
 #[derive(Debug, Parser)]
 #[command(
-    name = "millipede",
+    name = "persivio",
     version,
-    about = "Millipede download manager (headless client)"
+    about = "Persivio download manager (headless client)"
 )]
 struct Cli {}
 
 fn main() {
     let _cli = Cli::parse();
     println!(
-        "millipede {} (engine: {}) — no commands implemented yet",
+        "persivio {} (engine: {}) — no commands implemented yet",
         env!("CARGO_PKG_VERSION"),
-        mp_engine::CRATE_NAME
+        pv_engine::CRATE_NAME
     );
 }
 

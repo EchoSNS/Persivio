@@ -17,5 +17,5 @@ integration is on the specta 2 / tauri-specta 2 release-candidate line).
 
 ## Consequences
 - Rust is the single source of truth; a type change becomes a TypeScript compile error.
-- Shared types need specta derives, which pulls `specta` into `mp-core` behind a feature flag.
+- Shared types need specta derives, which pulls `specta` into `pv-core` behind a feature flag.
 - We depend on tauri-specta keeping pace with Tauri releases.

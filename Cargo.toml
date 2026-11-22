@@ -1,12 +1,12 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/mp-core",
-    "crates/mp-http",
-    "crates/mp-torrent",
-    "crates/mp-store",
-    "crates/mp-engine",
-    "crates/mp-testkit",
+    "crates/pv-core",
+    "crates/pv-http",
+    "crates/pv-torrent",
+    "crates/pv-store",
+    "crates/pv-engine",
+    "crates/pv-testkit",
     "apps/cli",
 ]
 
@@ -15,6 +15,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.100"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/EchoSNS/Persivio"
 publish = false
 
 # Shared dependency versions. Only crates that a member actually uses are listed:
@@ -22,8 +23,8 @@ publish = false
 # the crates it introduces. Versions below checked on 2026-11-22.
 [workspace.dependencies]
 # Internal crates
-mp-core = { path = "crates/mp-core" }
-mp-engine = { path = "crates/mp-engine" }
+pv-core = { path = "crates/pv-core" }
+pv-engine = { path = "crates/pv-engine" }
 
 # Async
 async-trait = "0.1.92"

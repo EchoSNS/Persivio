@@ -24,7 +24,7 @@ ignore = []
 allow = [
     "MIT",
     "Apache-2.0",
-    "BSD-3-Clause", # matchit (axum router, dev-only via mp-testkit), added Phase 2
+    "BSD-3-Clause", # matchit (axum router, dev-only via pv-testkit), added Phase 2
     "Unicode-3.0",
     "Zlib", # foldhash (via sqlx -> hashbrown), added Phase 1
 ]
