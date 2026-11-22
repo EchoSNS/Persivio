@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 4 — multi-connection segmented HTTP downloads with work stealing, durable checkpoints and resume.
+> **Status:** Phase 5 — a working headless download manager: queue, speed limits, crash recovery and a CLI.
 
 ## Layout
 
@@ -36,6 +36,23 @@ cargo nextest run --workspace
 cargo deny check
 cargo run -p persivio-cli -- --help
 ```
+
+## Using the CLI
+
+```sh
+persivio add https://example.com/file.iso            # add and download, with progress bars
+persivio add URL1 URL2 --dir D:/ISOs -c 8 --no-wait  # only queue
+persivio list                                          # all downloads and their state
+persivio pause <id|all>     persivio resume <id|all>
+persivio cancel <id>        persivio rm <id> [--delete-files]
+persivio watch                                         # run the queue until it is empty
+persivio settings show
+persivio settings set global_speed_limit_bps 2000000   # or `none`
+```
+
+Ids can be shortened to any unique fragment shown by `list`. Ctrl+C stops gracefully;
+interrupted downloads resume on the next `watch` (or automatically with
+`settings set auto_resume_on_startup true`).
 
 ## License
 

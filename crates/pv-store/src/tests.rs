@@ -504,3 +504,49 @@ async fn corrupt_rows_are_reported_not_misread() {
         Err(StoreError::Corrupt(_))
     ));
 }
+
+#[tokio::test]
+async fn queue_order_round_trips_and_defaults_to_zero() {
+    let (_dir, store) = open_temp().await;
+    let a = full_http_task();
+    let b = full_http_task();
+    store.insert_task(&a).await.unwrap();
+    store.insert_task(&b).await.unwrap();
+    assert!(
+        store
+            .load_all()
+            .await
+            .unwrap()
+            .iter()
+            .all(|t| t.queue_order == 0)
+    );
+    store
+        .set_queue_order(&[(a.id, 5), (b.id, -1), (TaskId::new(), 9)])
+        .await
+        .unwrap();
+    let all = store.load_all().await.unwrap();
+    let order = |id| {
+        all.iter()
+            .find(|t| t.snapshot.id == id)
+            .unwrap()
+            .queue_order
+    };
+    assert_eq!((order(a.id), order(b.id)), (5, -1));
+}
+
+#[tokio::test]
+async fn file_name_can_be_updated() {
+    let (_dir, store) = open_temp().await;
+    let task = full_http_task();
+    store.insert_task(&task).await.unwrap();
+    store
+        .update_file_name(task.id, "final (1).iso")
+        .await
+        .unwrap();
+    let t = store.get_task(task.id).await.unwrap().unwrap();
+    assert_eq!(t.snapshot.spec.file_name.as_deref(), Some("final (1).iso"));
+    assert!(matches!(
+        store.update_file_name(TaskId::new(), "x").await,
+        Err(StoreError::NotFound(_))
+    ));
+}

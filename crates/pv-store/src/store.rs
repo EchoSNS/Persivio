@@ -45,6 +45,8 @@ pub struct StoredTask {
     pub http: HttpResumeInfo,
     /// Segment table, ordered by index (empty until planned, and for torrents).
     pub segments: Vec<Segment>,
+    /// Manual queue position (lower runs first).
+    pub queue_order: i64,
 }
 
 /// Handle to the Persivio database. Cheap to clone (it wraps a connection pool).
@@ -241,6 +243,36 @@ impl Store {
                 // Dropping `tx` without commit rolls back the updates made so far.
                 return Err(StoreError::SegmentNotFound { task: id, index });
             }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Sets the task's current file name (e.g. the final name after de-duplication).
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if the task does not exist.
+    pub async fn update_file_name(&self, id: TaskId, name: &str) -> Result<(), StoreError> {
+        let result = sqlx::query("UPDATE tasks SET file_name = ? WHERE id = ?")
+            .bind(name)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Persists manual queue positions for many tasks in one transaction.
+    ///
+    /// # Errors
+    /// Database errors; unknown ids are ignored.
+    pub async fn set_queue_order(&self, order: &[(TaskId, i64)]) -> Result<(), StoreError> {
+        let mut tx = self.pool.begin().await?;
+        for (id, position) in order {
+            sqlx::query("UPDATE tasks SET queue_order = ? WHERE id = ?")
+                .bind(*position)
+                .bind(id.to_string())
+                .execute(&mut *tx)
+                .await?;
         }
         tx.commit().await?;
         Ok(())
@@ -529,5 +561,6 @@ fn task_from_row(row: &SqliteRow, segments: Vec<Segment>) -> Result<StoredTask, 
             last_modified: row.try_get("last_modified")?,
         },
         segments,
+        queue_order: row.try_get("queue_order")?,
     })
 }

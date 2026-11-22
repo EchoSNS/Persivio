@@ -31,7 +31,11 @@ allow = [
     "Zlib", # foldhash (via sqlx -> hashbrown), added Phase 1
 ]
 confidence-threshold = 0.8
-exceptions = []
+exceptions = [
+    # MPL-2.0 is file-level copyleft: obligations cover only option-ext's own (unmodified)
+    # source files, available on crates.io. Pulled in by `directories` (CLI), Phase 5.
+    { allow = ["MPL-2.0"], crate = "option-ext" },
+]
 
 [licenses.private]
 # Our own workspace crates are `publish = false`; don't require them to match `allow`.
