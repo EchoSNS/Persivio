@@ -89,7 +89,8 @@ jobs:
         with:
           tool: cargo-fuzz
       - name: Fuzz ${{ matrix.target }} for ${{ matrix.seconds }}s
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=${{ matrix.seconds }}
+        # The prebuilt cargo-fuzz is a musl binary and would default to a musl target.
+        run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=${{ matrix.seconds }}
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@v7
