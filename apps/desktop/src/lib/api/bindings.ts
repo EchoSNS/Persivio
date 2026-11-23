@@ -38,6 +38,10 @@ export const commands = {
 	defaultDownloadDir: (options?: InvokeOptions) => __TAURI_INVOKE<string>("default_download_dir", undefined, options),
 	/**  Shows a task's file (or folder) in the system file manager. Never opens or runs it. */
 	revealTask: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("reveal_task", { id }, options),
+	/**  One task with segments, files and safe metadata, for the detail drawer. */
+	getTaskDetail: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<TaskDetailView>("get_task_detail", { id }, options),
+	/**  Reads a `.torrent` file (base64) without adding it, to choose files first. */
+	inspectTorrent: (data: string, options?: InvokeOptions) => __TAURI_INVOKE<TorrentInfoView>("inspect_torrent", { data }, options),
 };
 
 /** Events */
@@ -48,11 +52,11 @@ export const events = {
 /* Types */
 /**  What the user asked to download. */
 export type AddRequest = {
-	/**  An `http(s)://` URL or a `magnet:?` link. */
-	source: string,
+	/**  Link or `.torrent` file. */
+	source: AddSource,
 	/**  Destination directory; default: the settings' or the OS download folder. */
 	destDir: string | null,
-	/**  File name override. */
+	/**  File name override (HTTP). */
 	fileName: string | null,
 	/**  Connections (1–32) for HTTP. */
 	connections: number | null,
@@ -60,6 +64,42 @@ export type AddRequest = {
 	speedLimitBps: number | null,
 	/**  Category label. */
 	category: string | null,
+	/**  HTTP: extra request headers. */
+	headers: HeaderView[],
+	/**  HTTP: `Cookie` header value. */
+	cookies: string | null,
+	/**  HTTP: `Referer` URL. */
+	referer: string | null,
+	/**  Checksum to verify after download. */
+	checksum: ChecksumView | null,
+	/**  Torrents: file indexes to download; `null` = all. */
+	selectedFiles: number[] | null,
+};
+
+/**  Where a new download comes from. */
+export type AddSource = 
+/**  An `http(s)://` URL or a `magnet:?` link. */
+{ type: "link"; 
+/**  The URL or magnet link. */
+url: string } | 
+/**  The content of a `.torrent` file, read by the UI (no path crosses IPC). */
+{ type: "torrent_file"; 
+/**  Base64 of the file's bytes. */
+data: string };
+
+/**  Checksum algorithm. */
+export type ChecksumAlgorithmView = 
+/**  SHA-256. */
+"sha256" | 
+/**  MD5 (only to match published checksums). */
+"md5";
+
+/**  An expected checksum. */
+export type ChecksumView = {
+	/**  Algorithm. */
+	algorithm: ChecksumAlgorithmView,
+	/**  Expected digest in hex. */
+	hex: string,
 };
 
 /**  A failed command: a category and a human-readable message. */
@@ -133,6 +173,14 @@ export type FileView = {
 	selected: boolean,
 };
 
+/**  One extra HTTP request header. */
+export type HeaderView = {
+	/**  Header name. */
+	name: string,
+	/**  Header value. */
+	value: string,
+};
+
 /**  Where to move a queued task. */
 export type MoveDirectionView = 
 /**  One place earlier. */
@@ -164,6 +212,16 @@ export type ProgressView = {
 	uploadBps: number | null,
 };
 
+/**  One HTTP segment, for the segment bar. */
+export type SegmentView = {
+	/**  First byte. */
+	start: number,
+	/**  Last byte (inclusive). */
+	end: number,
+	/**  Bytes written. */
+	downloaded: number,
+};
+
 /**  Application settings (mirror of `pv_core::Settings`). */
 export type SettingsView = {
 	/**  Default destination; `None` = the OS download folder. */
@@ -186,8 +244,32 @@ export type SettingsView = {
 	userAgent: string,
 	/**  Resume interrupted tasks at startup. */
 	autoResumeOnStartup: boolean,
+	/**  Category labels. */
+	categories: string[],
 	/**  BitTorrent settings. */
 	torrent: TorrentSettingsView,
+};
+
+/**  Everything the detail drawer shows. Still no secrets: only whether some were sent. */
+export type TaskDetailView = {
+	/**  The task. */
+	task: TaskView,
+	/**  Full path of the file (or torrent folder) once its name is known. */
+	path: string | null,
+	/**  HTTP: URL after redirects (without credentials). */
+	finalUrl: string | null,
+	/**  HTTP: segments with durable progress. */
+	segments: SegmentView[],
+	/**  Files (torrents: with selection). */
+	files: FileView[],
+	/**  Expected checksum, e.g. `SHA-256 3a7b…`. */
+	checksum: string | null,
+	/**  Connections override. */
+	connections: number | null,
+	/**  Per-task speed limit. */
+	speedLimitBps: number | null,
+	/**  Whether cookies or custom headers are sent (their values stay in Rust). */
+	sendsCredentials: boolean,
 };
 
 /**  Download protocol. */
@@ -248,6 +330,18 @@ export type TaskView = {
 	completedAt: number | null,
 	/**  Category label. */
 	category: string | null,
+};
+
+/**  A `.torrent` file's contents, shown before adding it. */
+export type TorrentInfoView = {
+	/**  Torrent name. */
+	name: string,
+	/**  Info hash (hex). */
+	infoHash: string,
+	/**  Sum of all file sizes. */
+	totalSize: number,
+	/**  Files. */
+	files: FileView[],
 };
 
 /**  BitTorrent settings (mirror of `pv_core::TorrentSettings`). */

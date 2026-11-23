@@ -325,15 +325,68 @@ impl EngineUiEvent {
     }
 }
 
+/// Where a new download comes from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AddSource {
+    /// An `http(s)://` URL or a `magnet:?` link.
+    Link {
+        /// The URL or magnet link.
+        url: String,
+    },
+    /// The content of a `.torrent` file, read by the UI (no path crosses IPC).
+    TorrentFile {
+        /// Base64 of the file's bytes.
+        data: String,
+    },
+}
+
+/// One extra HTTP request header.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct HeaderView {
+    /// Header name.
+    pub name: String,
+    /// Header value.
+    pub value: String,
+}
+
+/// Checksum algorithm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ChecksumAlgorithmView {
+    /// SHA-256.
+    Sha256,
+    /// MD5 (only to match published checksums).
+    Md5,
+}
+
+impl From<ChecksumAlgorithmView> for pv_core::ChecksumAlgorithm {
+    fn from(a: ChecksumAlgorithmView) -> Self {
+        match a {
+            ChecksumAlgorithmView::Sha256 => Self::Sha256,
+            ChecksumAlgorithmView::Md5 => Self::Md5,
+        }
+    }
+}
+
+/// An expected checksum.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChecksumView {
+    /// Algorithm.
+    pub algorithm: ChecksumAlgorithmView,
+    /// Expected digest in hex.
+    pub hex: String,
+}
+
 /// What the user asked to download.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AddRequest {
-    /// An `http(s)://` URL or a `magnet:?` link.
-    pub source: String,
+    /// Link or `.torrent` file.
+    pub source: AddSource,
     /// Destination directory; default: the settings' or the OS download folder.
     pub dest_dir: Option<String>,
-    /// File name override.
+    /// File name override (HTTP).
     pub file_name: Option<String>,
     /// Connections (1–32) for HTTP.
     pub connections: Option<u8>,
@@ -341,6 +394,120 @@ pub struct AddRequest {
     pub speed_limit_bps: Option<u64>,
     /// Category label.
     pub category: Option<String>,
+    /// HTTP: extra request headers.
+    pub headers: Vec<HeaderView>,
+    /// HTTP: `Cookie` header value.
+    pub cookies: Option<String>,
+    /// HTTP: `Referer` URL.
+    pub referer: Option<String>,
+    /// Checksum to verify after download.
+    pub checksum: Option<ChecksumView>,
+    /// Torrents: file indexes to download; `null` = all.
+    pub selected_files: Option<Vec<u32>>,
+}
+
+/// A `.torrent` file's contents, shown before adding it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentInfoView {
+    /// Torrent name.
+    pub name: String,
+    /// Info hash (hex).
+    pub info_hash: String,
+    /// Sum of all file sizes.
+    pub total_size: u64,
+    /// Files.
+    pub files: Vec<FileView>,
+}
+
+impl From<&pv_engine::TorrentInfo> for TorrentInfoView {
+    fn from(t: &pv_engine::TorrentInfo) -> Self {
+        Self {
+            name: t.name.clone(),
+            info_hash: t.info_hash.clone(),
+            total_size: t.files.iter().map(|f| f.size).sum(),
+            files: t.files.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// One HTTP segment, for the segment bar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SegmentView {
+    /// First byte.
+    pub start: u64,
+    /// Last byte (inclusive).
+    pub end: u64,
+    /// Bytes written.
+    pub downloaded: u64,
+}
+
+/// Everything the detail drawer shows. Still no secrets: only whether some were sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailView {
+    /// The task.
+    pub task: TaskView,
+    /// Full path of the file (or torrent folder) once its name is known.
+    pub path: Option<String>,
+    /// HTTP: URL after redirects (without credentials).
+    pub final_url: Option<String>,
+    /// HTTP: segments with durable progress.
+    pub segments: Vec<SegmentView>,
+    /// Files (torrents: with selection).
+    pub files: Vec<FileView>,
+    /// Expected checksum, e.g. `SHA-256 3a7b…`.
+    pub checksum: Option<String>,
+    /// Connections override.
+    pub connections: Option<u8>,
+    /// Per-task speed limit.
+    pub speed_limit_bps: Option<u64>,
+    /// Whether cookies or custom headers are sent (their values stay in Rust).
+    pub sends_credentials: bool,
+}
+
+impl From<&pv_engine::TaskDetail> for TaskDetailView {
+    fn from(d: &pv_engine::TaskDetail) -> Self {
+        let spec = &d.task.spec;
+        let sends_credentials = matches!(
+            &spec.source,
+            Source::Http { headers, cookies, .. } if !headers.is_empty() || cookies.is_some()
+        );
+        Self {
+            task: (&d.task).into(),
+            path: spec.file_name.as_ref().map(|name| {
+                pv_core::filename::contained_path(&spec.dest_dir, name)
+                    .unwrap_or_else(|_| spec.dest_dir.clone())
+                    .display()
+                    .to_string()
+            }),
+            final_url: d.http.final_url.as_ref().map(|u| {
+                display_source(&Source::Http {
+                    url: u.clone(),
+                    headers: Vec::new(),
+                    cookies: None,
+                    referer: None,
+                })
+            }),
+            segments: d
+                .segments
+                .iter()
+                .map(|s| SegmentView {
+                    start: s.start,
+                    end: s.end,
+                    downloaded: s.downloaded,
+                })
+                .collect(),
+            files: d.files.iter().map(Into::into).collect(),
+            checksum: spec
+                .checksum
+                .as_ref()
+                .map(|c| format!("{} {}", c.algorithm(), c.expected())),
+            connections: spec.connections,
+            speed_limit_bps: spec.speed_limit_bps,
+            sends_credentials,
+        }
+    }
 }
 
 /// Where to move a queued task.
@@ -392,6 +559,8 @@ pub struct SettingsView {
     pub user_agent: String,
     /// Resume interrupted tasks at startup.
     pub auto_resume_on_startup: bool,
+    /// Category labels.
+    pub categories: Vec<String>,
     /// BitTorrent settings.
     pub torrent: TorrentSettingsView,
 }
@@ -436,6 +605,7 @@ impl From<&Settings> for SettingsView {
             connect_timeout_secs: s.connect_timeout_secs,
             user_agent: s.user_agent.clone(),
             auto_resume_on_startup: s.auto_resume_on_startup,
+            categories: s.categories.clone(),
             torrent: TorrentSettingsView {
                 listen_port: t.listen_port,
                 dht: t.dht,
@@ -464,6 +634,7 @@ impl From<SettingsView> for Settings {
             connect_timeout_secs: s.connect_timeout_secs,
             user_agent: s.user_agent,
             auto_resume_on_startup: s.auto_resume_on_startup,
+            categories: s.categories,
             torrent: TorrentSettings {
                 listen_port: t.listen_port,
                 dht: t.dht,

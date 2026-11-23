@@ -240,6 +240,10 @@ impl Actor {
                 let result = self.select_files(id, files).await;
                 reply(r, result);
             }
+            Command::Detail(id, r) => {
+                let result = self.detail(id).await;
+                reply(r, result);
+            }
             Command::GetSettings(r) => reply(r, Ok((*self.settings).clone())),
             Command::List(r) => {
                 let list = self
@@ -565,6 +569,30 @@ impl Actor {
         }
     }
 
+    /// The task plus what only the database holds: segments, files, final URL.
+    async fn detail(&self, id: TaskId) -> Result<crate::TaskDetail, EngineError> {
+        let task = self
+            .tasks
+            .get(&id)
+            .ok_or(EngineError::NotFound(id))?
+            .clone();
+        let stored = self.store.get_task(id).await?;
+        let mut files = self.store.files(id).await?;
+        if let Some(selected) = &task.spec.selected_files {
+            for file in &mut files {
+                file.selected = selected.contains(&file.index);
+            }
+        }
+        Ok(crate::TaskDetail {
+            segments: stored
+                .as_ref()
+                .map_or_else(Vec::new, |s| s.segments.clone()),
+            http: stored.map_or_else(pv_core::HttpResumeInfo::default, |s| s.http),
+            files,
+            task,
+        })
+    }
+
     async fn on_metadata(&mut self, id: TaskId, meta: ResolvedMetadata) {
         let http = meta.http.clone().unwrap_or_default();
         if let Err(e) = self
@@ -579,6 +607,11 @@ impl Actor {
             .await
         {
             tracing::warn!(%id, %e, "could not persist metadata");
+        }
+        if !meta.files.is_empty()
+            && let Err(e) = self.store.set_files(id, &meta.files).await
+        {
+            tracing::warn!(%id, %e, "could not persist the file list");
         }
         if let Some(task) = self.tasks.get_mut(&id) {
             if meta.name.is_some() {

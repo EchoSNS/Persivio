@@ -96,6 +96,22 @@ async fn torrent_file_downloads_through_the_engine_and_can_be_removed_with_files
     assert_eq!(done.spec.file_name.as_deref(), Some("e.bin"));
     assert_eq!((done.downloaded, done.total_size), (500_000, Some(500_000)));
     assert_eq!(sha256_file(dest.join("e.bin")).await.unwrap(), f.sha256);
+    let detail = e.detail(id).await.unwrap();
+    assert_eq!(detail.segments, [], "torrents have no segment table");
+    assert_eq!(detail.files.len(), 1);
+    assert_eq!(
+        (detail.files[0].path.as_str(), detail.files[0].size),
+        ("e.bin", 500_000)
+    );
+    e.select_files(id, Some(vec![])).await.unwrap();
+    assert!(
+        !e.detail(id).await.unwrap().files[0].selected,
+        "the stored list reflects the current selection"
+    );
+    assert!(matches!(
+        e.detail(TaskId::new()).await,
+        Err(EngineError::NotFound(_))
+    ));
 
     assert!(matches!(
         e.select_files(TaskId::new(), None).await,

@@ -8,7 +8,7 @@ use pv_core::{Source, TaskId, TaskSpec};
 use url::Url;
 
 use crate::api::EngineApi;
-use crate::dto::{AddRequest, SettingsView, TaskView};
+use crate::dto::{AddRequest, AddSource, SettingsView, TaskDetailView, TaskView, TorrentInfoView};
 use crate::error::CommandError;
 
 /// Parses a task id sent by the UI.
@@ -70,7 +70,7 @@ pub async fn add_task(
     request: AddRequest,
     os_dir: Option<PathBuf>,
 ) -> Result<String, CommandError> {
-    let source = parse_source(&request.source)?;
+    let source = build_source(&request)?;
     let dest_dir = match request.dest_dir.filter(|d| !d.trim().is_empty()) {
         Some(dir) => PathBuf::from(dir),
         None => default_download_dir(engine, os_dir).await?,
@@ -80,8 +80,94 @@ pub async fn add_task(
     spec.connections = request.connections;
     spec.speed_limit_bps = request.speed_limit_bps;
     spec.category = request.category.filter(|c| !c.trim().is_empty());
-    // The engine validates the spec (absolute folder, connection range, ...).
+    spec.checksum = request
+        .checksum
+        .filter(|c| !c.hex.trim().is_empty())
+        .map(|c| pv_core::Checksum::new(c.algorithm.into(), c.hex.trim()))
+        .transpose()
+        .map_err(|e| CommandError::invalid(e.to_string()))?;
+    spec.selected_files = request.selected_files;
+    // The engine validates the spec (absolute folder, connection range, headers, ...).
     Ok(engine.add(spec).await?.to_string())
+}
+
+/// The engine source for a request: a link with its HTTP context, or torrent bytes.
+fn build_source(request: &AddRequest) -> Result<Source, CommandError> {
+    let has_http_context =
+        !request.headers.is_empty() || request.cookies.is_some() || request.referer.is_some();
+    match &request.source {
+        AddSource::TorrentFile { data } => {
+            let bytes = decode_torrent(data)?;
+            // Reject garbage and unsafe paths now, with a clear message.
+            pv_engine::inspect_torrent(&bytes).map_err(|e| CommandError::invalid(e.to_string()))?;
+            Ok(Source::TorrentFile { bytes })
+        }
+        AddSource::Link { url } => match parse_source(url)? {
+            Source::Http { url, .. } => {
+                let referer = request
+                    .referer
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|r| !r.is_empty())
+                    .map(Url::parse)
+                    .transpose()
+                    .map_err(|_| CommandError::invalid("the referer is not a valid URL"))?;
+                let source = Source::Http {
+                    url,
+                    headers: request
+                        .headers
+                        .iter()
+                        .filter(|h| !h.name.trim().is_empty())
+                        .map(|h| (h.name.trim().to_owned(), h.value.clone()))
+                        .collect(),
+                    cookies: request.cookies.clone().filter(|c| !c.trim().is_empty()),
+                    referer,
+                };
+                source
+                    .validate()
+                    .map_err(|e| CommandError::invalid(e.to_string()))?;
+                Ok(source)
+            }
+            _ if has_http_context => Err(CommandError::invalid(
+                "headers, cookies and referer only apply to HTTP downloads",
+            )),
+            magnet => Ok(magnet),
+        },
+    }
+}
+
+/// Decodes base64 `.torrent` content sent by the UI, enforcing the size limit first.
+fn decode_torrent(data: &str) -> Result<Vec<u8>, CommandError> {
+    use base64::Engine as _;
+    // 4 base64 characters encode 3 bytes.
+    if data.len() / 4 * 3 > pv_engine::MAX_TORRENT_FILE_SIZE + 3 {
+        return Err(CommandError::invalid("the .torrent file is too large"));
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(data.trim())
+        .map_err(|_| CommandError::invalid("the .torrent file could not be read"))
+}
+
+/// Reads a `.torrent` file's name and files without adding it.
+///
+/// # Errors
+/// Invalid, too large or unsafe torrents.
+pub fn inspect_torrent(data: &str) -> Result<TorrentInfoView, CommandError> {
+    let bytes = decode_torrent(data)?;
+    let info =
+        pv_engine::inspect_torrent(&bytes).map_err(|e| CommandError::invalid(e.to_string()))?;
+    Ok(TorrentInfoView::from(&info))
+}
+
+/// One task with segments, files and safe metadata.
+///
+/// # Errors
+/// Unknown task or engine errors.
+pub async fn task_detail(
+    engine: &dyn EngineApi,
+    id: TaskId,
+) -> Result<TaskDetailView, CommandError> {
+    Ok(TaskDetailView::from(&engine.detail(id).await?))
 }
 
 /// Replaces the settings (validated by the engine).
@@ -132,6 +218,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use super::*;
+    use crate::dto::{ChecksumAlgorithmView, ChecksumView, HeaderView};
     use crate::error::ErrorKind;
 
     /// Records calls and keeps tasks in memory, like the engine would.
@@ -196,6 +283,22 @@ mod tests {
         async fn list(&self) -> Result<Vec<TaskSnapshot>, EngineError> {
             Ok(self.tasks.lock().unwrap().clone())
         }
+        async fn detail(&self, id: TaskId) -> Result<pv_engine::TaskDetail, EngineError> {
+            let task = self
+                .tasks
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|t| t.id == id)
+                .cloned()
+                .ok_or(EngineError::NotFound(id))?;
+            Ok(pv_engine::TaskDetail {
+                task,
+                segments: Vec::new(),
+                files: Vec::new(),
+                http: pv_core::HttpResumeInfo::default(),
+            })
+        }
         fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
             broadcast::channel(1).1
         }
@@ -204,13 +307,33 @@ mod tests {
 
     fn request(source: &str) -> AddRequest {
         AddRequest {
-            source: source.to_owned(),
+            source: AddSource::Link {
+                url: source.to_owned(),
+            },
             dest_dir: None,
             file_name: None,
             connections: None,
             speed_limit_bps: None,
             category: None,
+            headers: Vec::new(),
+            cookies: None,
+            referer: None,
+            checksum: None,
+            selected_files: None,
         }
+    }
+
+    /// A minimal single-file `.torrent` (bencode), base64-encoded like the UI sends it.
+    fn torrent_b64(name: &str) -> String {
+        use base64::Engine as _;
+        let mut t = format!(
+            "d4:infod6:lengthi10e4:name{}:{name}12:piece lengthi16384e6:pieces20:",
+            name.len()
+        )
+        .into_bytes();
+        t.extend_from_slice(&[7; 20]);
+        t.extend_from_slice(b"ee");
+        base64::engine::general_purpose::STANDARD.encode(t)
     }
 
     #[tokio::test]
@@ -306,5 +429,107 @@ mod tests {
 
         let err = task_path(&engine, TaskId::new()).await.unwrap_err();
         assert_eq!(err.kind, ErrorKind::NotFound);
+    }
+
+    #[tokio::test]
+    async fn http_context_and_checksum_reach_the_engine() {
+        let engine = MockEngine::default();
+        let mut req = request("https://example.com/a.iso");
+        req.headers = vec![
+            HeaderView {
+                name: "X-Token".into(),
+                value: "t".into(),
+            },
+            HeaderView {
+                name: " ".into(),
+                value: "ignored".into(),
+            },
+        ];
+        req.cookies = Some("s=1".into());
+        req.referer = Some("https://example.com/page".into());
+        req.checksum = Some(ChecksumView {
+            algorithm: ChecksumAlgorithmView::Sha256,
+            hex: "AB".repeat(32),
+        });
+        add_task(&engine, req, Some(std::env::temp_dir()))
+            .await
+            .unwrap();
+        let task = engine.list().await.unwrap().remove(0);
+        match &task.spec.source {
+            Source::Http {
+                headers,
+                cookies,
+                referer,
+                ..
+            } => {
+                assert_eq!(headers, &[("X-Token".to_owned(), "t".to_owned())]);
+                assert_eq!(cookies.as_deref(), Some("s=1"));
+                assert_eq!(referer.as_ref().unwrap().path(), "/page");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(task.spec.checksum.unwrap().expected(), "ab".repeat(32));
+        let detail = task_detail(&engine, task.id).await.unwrap();
+        assert!(detail.sends_credentials);
+        let json = serde_json::to_string(&detail).unwrap();
+        assert!(!json.contains("s=1") && !json.contains("X-Token"), "{json}");
+    }
+
+    #[tokio::test]
+    async fn bad_http_context_is_rejected() {
+        let engine = MockEngine::default();
+        let os = Some(std::env::temp_dir());
+        let mut bad_header = request("https://example.com/a");
+        bad_header.headers = vec![HeaderView {
+            name: "Bad Name".into(),
+            value: "x".into(),
+        }];
+        let mut magnet_cookies = request("magnet:?xt=urn:btih:abc");
+        magnet_cookies.cookies = Some("s=1".into());
+        let mut bad_checksum = request("https://example.com/a");
+        bad_checksum.checksum = Some(ChecksumView {
+            algorithm: ChecksumAlgorithmView::Md5,
+            hex: "xyz".into(),
+        });
+        for req in [bad_header, magnet_cookies, bad_checksum] {
+            let err = add_task(&engine, req, os.clone()).await.unwrap_err();
+            assert_eq!(err.kind, ErrorKind::InvalidInput, "{err:?}");
+        }
+        assert_eq!(engine.list().await.unwrap(), []);
+    }
+
+    #[tokio::test]
+    async fn torrent_files_are_inspected_and_added_with_a_selection() {
+        let info = inspect_torrent(&torrent_b64("a.bin")).unwrap();
+        assert_eq!((info.name.as_str(), info.total_size), ("a.bin", 10));
+        assert_eq!(info.files.len(), 1);
+
+        let engine = MockEngine::default();
+        let mut req = request("");
+        req.source = AddSource::TorrentFile {
+            data: torrent_b64("a.bin"),
+        };
+        req.selected_files = Some(vec![0]);
+        add_task(&engine, req, Some(std::env::temp_dir()))
+            .await
+            .unwrap();
+        let task = engine.list().await.unwrap().remove(0);
+        assert!(matches!(task.spec.source, Source::TorrentFile { .. }));
+        assert_eq!(task.spec.selected_files, Some(vec![0]));
+
+        for bad in ["not base64!", "aGVsbG8=", &torrent_b64("..")] {
+            assert_eq!(
+                inspect_torrent(bad).unwrap_err().kind,
+                ErrorKind::InvalidInput,
+                "{bad}"
+            );
+        }
+        let huge = "A".repeat(pv_engine::MAX_TORRENT_FILE_SIZE / 3 * 4 + 64);
+        assert!(
+            inspect_torrent(&huge)
+                .unwrap_err()
+                .message
+                .contains("too large")
+        );
     }
 }

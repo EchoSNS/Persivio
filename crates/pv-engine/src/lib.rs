@@ -33,7 +33,8 @@ use tokio::sync::{broadcast, mpsc};
 pub use actor::PROGRESS_INTERVAL;
 pub use data_dir::{DataDir, DataDirError, os_download_dir};
 pub use error::EngineError;
-pub use handle::{EngineHandle, MoveDirection};
+pub use handle::{EngineHandle, MoveDirection, TaskDetail};
+pub use pv_torrent::{MAX_TORRENT_FILE_SIZE, TorrentInfo, inspect_torrent};
 
 /// How to start the engine.
 #[derive(Clone)]

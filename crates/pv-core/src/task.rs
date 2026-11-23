@@ -101,6 +101,9 @@ pub enum SpecError {
     /// A file name override must be a plain name, not a path.
     #[error("file name must not be empty or contain path separators")]
     InvalidFileName,
+    /// A category label that is empty, too long or has control characters.
+    #[error("category must be 1 to 40 printable characters")]
+    InvalidCategory,
 }
 
 impl TaskSpec {
@@ -141,6 +144,13 @@ impl TaskSpec {
             && (name.trim().is_empty() || name.contains(['/', '\\']) || name == "." || name == "..")
         {
             return Err(SpecError::InvalidFileName);
+        }
+        if let Some(c) = &self.category
+            && (c.trim().is_empty()
+                || c.chars().count() > crate::settings::MAX_CATEGORY_LEN
+                || c.chars().any(char::is_control))
+        {
+            return Err(SpecError::InvalidCategory);
         }
         Ok(())
     }
@@ -294,6 +304,16 @@ mod tests {
         let mut s = http_spec();
         s.speed_limit_bps = Some(0);
         assert_eq!(s.validate(), Err(SpecError::ZeroSpeedLimit));
+
+        let mut s = http_spec();
+        s.category = Some(
+            "a
+b"
+            .into(),
+        );
+        assert_eq!(s.validate(), Err(SpecError::InvalidCategory));
+        s.category = Some("Video".into());
+        assert_eq!(s.validate(), Ok(()));
 
         let mut s = http_spec();
         s.dest_dir = PathBuf::from("relative/dir");

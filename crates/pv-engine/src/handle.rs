@@ -1,6 +1,8 @@
 //! [`EngineHandle`]: the only way front ends talk to the engine (ADR-002).
 
-use pv_core::{EngineEvent, Settings, TaskId, TaskSnapshot, TaskSpec};
+use pv_core::{
+    EngineEvent, FileEntry, HttpResumeInfo, Segment, Settings, TaskId, TaskSnapshot, TaskSpec,
+};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 use crate::EngineError;
@@ -46,8 +48,22 @@ pub(crate) enum Command {
     },
     SetSettings(Box<Settings>, Reply<()>),
     GetSettings(Reply<Settings>),
+    Detail(TaskId, Reply<TaskDetail>),
     List(Reply<Vec<TaskSnapshot>>),
     Shutdown(oneshot::Sender<()>),
+}
+
+/// Everything a front end shows about one task (the detail view).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskDetail {
+    /// The task as in [`EngineHandle::list`].
+    pub task: TaskSnapshot,
+    /// HTTP: the segment table with durable progress (empty for torrents).
+    pub segments: Vec<Segment>,
+    /// Files with their current selection (empty until metadata is known).
+    pub files: Vec<FileEntry>,
+    /// HTTP: final URL after redirects and validators.
+    pub http: HttpResumeInfo,
 }
 
 /// A cloneable handle to a running engine. All methods are cheap message sends; the
@@ -172,6 +188,14 @@ impl EngineHandle {
     /// A stopped engine.
     pub async fn settings(&self) -> Result<Settings, EngineError> {
         self.call(Command::GetSettings).await
+    }
+
+    /// One task with its segments and files.
+    ///
+    /// # Errors
+    /// [`EngineError::NotFound`], store errors, or [`EngineError::Stopped`].
+    pub async fn detail(&self, id: TaskId) -> Result<TaskDetail, EngineError> {
+        self.call(|r| Command::Detail(id, r)).await
     }
 
     /// All tasks in creation order, with live progress for running ones.

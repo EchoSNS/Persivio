@@ -602,3 +602,34 @@ async fn torrent_state_and_file_selection_round_trip() {
     store.delete_task(task.id).await.unwrap();
     assert_eq!(store.torrent_state(task.id).await.unwrap(), None, "cascade");
 }
+
+#[tokio::test]
+async fn file_lists_are_stored_and_replaced() {
+    let (_dir, store) = open_temp().await;
+    let task = full_http_task();
+    store.insert_task(&task).await.unwrap();
+    assert_eq!(store.files(task.id).await.unwrap(), []);
+    let files = vec![
+        pv_core::FileEntry {
+            index: 0,
+            path: "a.bin".into(),
+            size: 10,
+            selected: true,
+        },
+        pv_core::FileEntry {
+            index: 1,
+            path: "sub/b.bin".into(),
+            size: 20,
+            selected: false,
+        },
+    ];
+    store.set_files(task.id, &files).await.unwrap();
+    assert_eq!(store.files(task.id).await.unwrap(), files);
+    store.set_files(task.id, &files[..1]).await.unwrap();
+    assert_eq!(store.files(task.id).await.unwrap(), files[..1]);
+    assert_eq!(store.files(TaskId::new()).await.unwrap(), []);
+    assert!(matches!(
+        store.set_files(TaskId::new(), &files).await,
+        Err(StoreError::NotFound(_))
+    ));
+}

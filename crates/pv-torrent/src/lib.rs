@@ -348,6 +348,62 @@ async fn follow(
     }
 }
 
+/// What a `.torrent` file contains, read without any network access.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TorrentInfo {
+    /// Torrent name (the folder name for multi-file torrents).
+    pub name: String,
+    /// Info hash, lower-case hex.
+    pub info_hash: String,
+    /// Files, all marked selected. Paths are validated like a real download's.
+    pub files: Vec<FileEntry>,
+}
+
+/// Largest `.torrent` file accepted (large ones list many pieces; 16 MiB is generous).
+pub const MAX_TORRENT_FILE_SIZE: usize = 16 * 1024 * 1024;
+
+/// Reads a `.torrent` file's name and file list, e.g. to choose files before adding it.
+///
+/// # Errors
+/// [`ProtocolError::InvalidSource`] if the bytes are too large, not a valid torrent,
+/// or contain an unsafe path.
+pub fn inspect_torrent(bytes: &[u8]) -> Result<TorrentInfo, ProtocolError> {
+    let invalid = |e: &dyn std::fmt::Display| {
+        ProtocolError::InvalidSource(format!("not a valid .torrent file: {e}"))
+    };
+    if bytes.len() > MAX_TORRENT_FILE_SIZE {
+        return Err(ProtocolError::InvalidSource(
+            "the .torrent file is too large".to_owned(),
+        ));
+    }
+    let meta = librqbit::torrent_from_bytes(bytes).map_err(|e| invalid(&e))?;
+    let info_hash = meta.info_hash.as_string();
+    let info = meta.info.data.validate().map_err(|e| invalid(&e))?;
+    let mut files = Vec::new();
+    for (index, details) in info.iter_file_details().enumerate() {
+        let components: Vec<String> = details
+            .filename
+            .iter_components()
+            .map(std::borrow::Cow::into_owned)
+            .collect();
+        files.push(FileEntry {
+            index: u32::try_from(index).map_err(|e| invalid(&e))?,
+            path: validate_torrent_path(&components)?,
+            size: details.len,
+            selected: true,
+        });
+    }
+    let name = info
+        .name()
+        .map_or_else(|| info_hash.clone(), std::borrow::Cow::into_owned);
+    validate_torrent_path(&[name.as_str()])?;
+    Ok(TorrentInfo {
+        name,
+        info_hash,
+        files,
+    })
+}
+
 /// Where a torrent's files go, decided once and reproducible on resume.
 pub use paths::Layout;
 

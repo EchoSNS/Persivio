@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 7 — HTTP and BitTorrent downloads with queue, limits, recovery, a CLI, and a first desktop app (task list with live progress).
+> **Status:** Phase 8 — HTTP and BitTorrent downloads with queue, limits and recovery; a CLI; and a desktop app with a full interface (filters, details, add dialog, settings, themes, keyboard and drag-and-drop).
 
 ## Layout
 
@@ -47,6 +47,7 @@ Desktop app:
 ```sh
 cd apps/desktop
 npm run tauri dev   # app with hot reload; regenerates src/lib/api/bindings.ts
+# the desktop binary is persivio-desktop (the CLI is persivio)
 npm run check       # svelte-check (TypeScript strict)
 npm test            # Vitest
 ```

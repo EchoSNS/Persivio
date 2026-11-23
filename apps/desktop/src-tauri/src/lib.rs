@@ -52,6 +52,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::subscribe_progress,
             commands::default_download_dir,
             commands::reveal_task,
+            commands::get_task_detail,
+            commands::inspect_torrent,
         ])
         .events(collect_events![EngineUiEvent])
         // Sizes/speeds are u64 byte counts, exact as JS numbers up to 8 PiB (ADR-018).

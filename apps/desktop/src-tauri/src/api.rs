@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use pv_core::{EngineEvent, Settings, TaskId, TaskSnapshot, TaskSpec};
-use pv_engine::{EngineError, EngineHandle, MoveDirection};
+use pv_engine::{EngineError, EngineHandle, MoveDirection, TaskDetail};
 use tokio::sync::broadcast;
 
 /// What the desktop app needs from the engine. Implemented by [`EngineHandle`].
@@ -32,6 +32,8 @@ pub trait EngineApi: Send + Sync {
     async fn set_settings(&self, settings: Settings) -> Result<(), EngineError>;
     /// See [`EngineHandle::list`].
     async fn list(&self) -> Result<Vec<TaskSnapshot>, EngineError>;
+    /// See [`EngineHandle::detail`].
+    async fn detail(&self, id: TaskId) -> Result<TaskDetail, EngineError>;
     /// See [`EngineHandle::subscribe`].
     fn subscribe(&self) -> broadcast::Receiver<EngineEvent>;
     /// See [`EngineHandle::shutdown`].
@@ -75,6 +77,9 @@ impl EngineApi for EngineHandle {
     }
     async fn list(&self) -> Result<Vec<TaskSnapshot>, EngineError> {
         Self::list(self).await
+    }
+    async fn detail(&self, id: TaskId) -> Result<TaskDetail, EngineError> {
+        Self::detail(self, id).await
     }
     fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
         Self::subscribe(self)

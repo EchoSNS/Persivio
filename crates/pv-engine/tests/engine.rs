@@ -129,6 +129,17 @@ async fn downloads_a_task_and_broadcasts_events() {
         }
     }
     assert!(saw_added && saw_metadata);
+    let detail = e.detail(id).await.unwrap();
+    assert_eq!(detail.task, done);
+    assert_eq!(
+        detail.segments.iter().map(|s| s.downloaded).sum::<u64>(),
+        300_000,
+        "segments are complete"
+    );
+    assert!(detail.segments.len() > 1, "4 connections, small segments");
+    assert_eq!(detail.http.final_url.unwrap().path(), "/file/a.bin");
+    assert_eq!(detail.files.len(), 1);
+    assert_eq!(detail.files[0].path, "a.bin");
     assert_eq!(
         states,
         [

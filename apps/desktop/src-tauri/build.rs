@@ -18,6 +18,8 @@ const COMMANDS: &[&str] = &[
     "subscribe_progress",
     "default_download_dir",
     "reveal_task",
+    "get_task_detail",
+    "inspect_torrent",
 ];
 
 fn main() {

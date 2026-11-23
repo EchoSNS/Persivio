@@ -1,6 +1,7 @@
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
+import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
 
 // Fixed port so tauri.conf.json's devUrl can point at it.
@@ -10,7 +11,9 @@ export default defineConfig({
 	plugins: [
 		tailwindcss(),
 		// SPA: Tauri serves the files itself; there is no server to render pages.
-		sveltekit({ adapter: adapter({ fallback: 'index.html' }) })
+		sveltekit({ adapter: adapter({ fallback: 'index.html' }) }),
+		// Browser builds of Svelte and auto-cleanup for component tests.
+		svelteTesting()
 	],
 	clearScreen: false,
 	server: {
@@ -22,6 +25,7 @@ export default defineConfig({
 	},
 	test: {
 		include: ['src/**/*.test.ts'],
+		// Pure logic runs in Node; component tests opt into jsdom per file.
 		environment: 'node'
 	}
 });

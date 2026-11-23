@@ -22,6 +22,8 @@
     "allow-set-settings",
     "allow-subscribe-progress",
     "allow-default-download-dir",
-    "allow-reveal-task"
+    "allow-reveal-task",
+    "allow-get-task-detail",
+    "allow-inspect-torrent"
   ]
 }

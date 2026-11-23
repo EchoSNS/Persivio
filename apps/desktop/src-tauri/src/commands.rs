@@ -18,7 +18,10 @@ use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::api::EngineApi;
-use crate::dto::{AddRequest, MoveDirectionView, ProgressView, SettingsView, TaskView};
+use crate::dto::{
+    AddRequest, MoveDirectionView, ProgressView, SettingsView, TaskDetailView, TaskView,
+    TorrentInfoView,
+};
 use crate::error::CommandError;
 use crate::forward::{PROGRESS_INTERVAL, forward_progress};
 use crate::ops;
@@ -175,6 +178,23 @@ pub async fn set_settings(
 pub async fn default_download_dir(state: State<'_, AppState>) -> Result<String, CommandError> {
     let dir = ops::default_download_dir(state.engine()?, pv_engine::os_download_dir()).await?;
     Ok(ops::display_path(&dir))
+}
+
+/// One task with segments, files and safe metadata, for the detail drawer.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_task_detail(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<TaskDetailView, CommandError> {
+    ops::task_detail(state.engine()?, ops::parse_id(&id)?).await
+}
+
+/// Reads a `.torrent` file (base64) without adding it, to choose files first.
+#[tauri::command]
+#[specta::specta]
+pub fn inspect_torrent(data: String) -> Result<TorrentInfoView, CommandError> {
+    ops::inspect_torrent(&data)
 }
 
 /// Shows a task's file (or folder) in the system file manager. Never opens or runs it.

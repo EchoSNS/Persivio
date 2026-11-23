@@ -37,6 +37,8 @@ pub struct Settings {
     pub user_agent: String,
     /// Resume tasks that were running when the app last exited (else they stay paused).
     pub auto_resume_on_startup: bool,
+    /// Category labels offered in the UI (sidebar filters, add dialog).
+    pub categories: Vec<String>,
     /// BitTorrent settings.
     pub torrent: TorrentSettings,
 }
@@ -54,6 +56,9 @@ impl Default for Settings {
             connect_timeout_secs: 15,
             user_agent: format!("Persivio/{}", env!("CARGO_PKG_VERSION")),
             auto_resume_on_startup: false,
+            categories: ["Video", "Music", "Documents", "Software", "Archives"]
+                .map(String::from)
+                .to_vec(),
             torrent: TorrentSettings::default(),
         }
     }
@@ -160,6 +165,9 @@ impl Settings {
                 "must be non-empty printable text",
             ));
         }
+        if let Some(message) = category_problem(&self.categories) {
+            return Err(SettingsError::new("categories", message));
+        }
         if self.torrent.listen_port == Some(0) {
             return Err(SettingsError::new(
                 "torrent.listen_port",
@@ -176,6 +184,28 @@ impl Settings {
         }
         Ok(())
     }
+}
+
+/// Longest category label, in characters.
+pub const MAX_CATEGORY_LEN: usize = 40;
+
+fn category_problem(categories: &[String]) -> Option<String> {
+    if categories.len() > 100 {
+        return Some("at most 100 categories".to_owned());
+    }
+    let mut seen = std::collections::HashSet::new();
+    for c in categories {
+        if c.trim().is_empty() || c.trim() != c {
+            return Some("names must be non-empty and have no surrounding spaces".to_owned());
+        }
+        if c.chars().count() > MAX_CATEGORY_LEN || c.chars().any(char::is_control) {
+            return Some(format!("`{c}` is too long or has control characters"));
+        }
+        if !seen.insert(c.to_lowercase()) {
+            return Some(format!("`{c}` is listed twice"));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -195,7 +225,12 @@ mod tests {
     #[test]
     fn validation_rejects_out_of_range_values() {
         type Mutate = fn(&mut Settings);
-        let cases: [(&str, Mutate); 9] = [
+        let cases: [(&str, Mutate); 12] = [
+            ("categories", |s| s.categories = vec![" Video".into()]),
+            ("categories", |s| {
+                s.categories = vec!["A".into(), "a".into()];
+            }),
+            ("categories", |s| s.categories = vec!["x".repeat(41)]),
             ("max_concurrent_tasks", |s| s.max_concurrent_tasks = 0),
             ("default_connections", |s| s.default_connections = 33),
             ("min_segment_size", |s| s.min_segment_size = 1),

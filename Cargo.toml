@@ -47,6 +47,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing = "0.1.44"
 
 # Data
+base64 = "0.23.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 url = { version = "2.5.9", features = ["serde"] }

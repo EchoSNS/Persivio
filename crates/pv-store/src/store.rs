@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use pv_core::{
-    CheckpointError, CheckpointSink, Checksum, FailReason, HttpResumeInfo, Segment, Settings,
-    Source, TaskId, TaskKind, TaskSnapshot, TaskSpec, TaskState, TaskStateKind, UnixMillis,
+    CheckpointError, CheckpointSink, Checksum, FailReason, FileEntry, HttpResumeInfo, Segment,
+    Settings, Source, TaskId, TaskKind, TaskSnapshot, TaskSpec, TaskState, TaskStateKind,
+    UnixMillis,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -283,6 +284,36 @@ impl Store {
             .execute(&self.pool)
             .await?;
         not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Stores the task's resolved file list.
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if the task does not exist.
+    pub async fn set_files(&self, id: TaskId, files: &[FileEntry]) -> Result<(), StoreError> {
+        let json = serde_json::to_string(files)?;
+        let result = sqlx::query("UPDATE tasks SET files_json = ? WHERE id = ?")
+            .bind(json)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// The task's file list (empty until metadata is resolved, or for unknown tasks).
+    ///
+    /// # Errors
+    /// Database errors or a corrupt JSON column.
+    pub async fn files(&self, id: TaskId) -> Result<Vec<FileEntry>, StoreError> {
+        let json: Option<Option<String>> =
+            sqlx::query_scalar("SELECT files_json FROM tasks WHERE id = ?")
+                .bind(id.to_string())
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(match json.flatten() {
+            Some(json) => serde_json::from_str(&json)?,
+            None => Vec::new(),
+        })
     }
 
     /// Stores (or replaces) a torrent's resolved metadata: info hash and `.torrent` bytes.

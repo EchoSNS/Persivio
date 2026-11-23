@@ -413,3 +413,33 @@ fn assert_marked(path: &Path, host_url: &str) {
         assert!(text.contains(&format!("HostUrl={host_url}")), "{text}");
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn torrent_files_can_be_inspected_without_downloading() {
+    let dir = tempfile::tempdir().unwrap();
+    let pack = dir.path().join("seed/pack");
+    let files = make_pack(&pack);
+    let seeder = seed(&pack, "pack").await;
+    let info = pv_torrent::inspect_torrent(&seeder.torrent).unwrap();
+    assert_eq!(info.name, "pack");
+    assert!(seeder.magnet.contains(&info.info_hash), "{}", seeder.magnet);
+    let mut listed: Vec<(String, u64)> = info
+        .files
+        .iter()
+        .map(|f| (f.path.clone(), f.size))
+        .collect();
+    listed.sort();
+    assert_eq!(
+        listed,
+        [
+            ("a.bin".to_owned(), files[0].len() as u64),
+            ("c.txt".to_owned(), files[2].len() as u64),
+            ("sub/b.bin".to_owned(), files[1].len() as u64),
+        ]
+    );
+    assert!(info.files.iter().all(|f| f.selected));
+    assert!(pv_torrent::inspect_torrent(b"not a torrent").is_err());
+    assert!(
+        pv_torrent::inspect_torrent(&vec![b'd'; pv_torrent::MAX_TORRENT_FILE_SIZE + 1]).is_err()
+    );
+}
