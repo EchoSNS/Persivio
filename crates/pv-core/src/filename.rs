@@ -72,6 +72,11 @@ pub fn sanitize_filename(raw: &str) -> String {
         .any(|r| r.eq_ignore_ascii_case(stem.trim_end()))
     {
         name.insert(0, '_');
+        // The prefix can push a truncated name one byte over the limit. Truncating again
+        // keeps the `_`, so the stem can no longer be a reserved name.
+        if name.len() > MAX_NAME_BYTES {
+            name = truncate_keeping_extension(&name, MAX_NAME_BYTES);
+        }
     }
     name
 }
@@ -116,5 +121,47 @@ pub fn contained_path(dir: &Path, name: &str) -> Result<PathBuf, ProtocolError> 
         _ => Err(ProtocolError::InvalidSource(format!(
             "unsafe file name `{name}`"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression (found by the `sanitize_filename` fuzzer): a long name whose truncated
+    /// stem is a Windows device name got its `_` prefix after truncation, ending one byte
+    /// over the limit.
+    #[test]
+    fn reserved_names_stay_within_the_length_limit_after_truncation() {
+        let fuzz_input: Vec<u8> = [
+            b"coN.\xa6\0\0".as_slice(),
+            &[0xff; 45],
+            &[0; 60],
+            &[0xff; 69],
+            b"oN.\xa6\0\0",
+        ]
+        .concat();
+        let cases = [
+            format!("CON.{}", "x".repeat(300)),
+            format!("nul {}.txt", " ".repeat(400)),
+            String::from_utf8_lossy(&fuzz_input).into_owned(),
+        ];
+        for raw in cases {
+            let name = sanitize_filename(&raw);
+            assert!(
+                name.len() <= MAX_NAME_BYTES,
+                "{} bytes: {name:?}",
+                name.len()
+            );
+            assert_ne!(name, "");
+            let stem = name.split('.').next().unwrap_or("");
+            assert!(
+                !WINDOWS_RESERVED
+                    .iter()
+                    .any(|r| r.eq_ignore_ascii_case(stem.trim_end())),
+                "{name:?}"
+            );
+            assert_eq!(sanitize_filename(&name), name, "idempotent");
+        }
     }
 }
