@@ -130,6 +130,10 @@ impl Harness {
 
     async fn run(&self, url: &str) -> Result<Outcome, ProtocolError> {
         let source = Source::http(Url::parse(url).unwrap()).unwrap();
+        self.run_source(source).await
+    }
+
+    async fn run_source(&self, source: Source) -> Result<Outcome, ProtocolError> {
         HttpProtocol
             .run(self.ctx(source, ResumeState::default(), None, None))
             .await
@@ -281,6 +285,77 @@ async fn refuses_redirects_to_non_http_schemes() {
         );
     }
     assert!(!h.dest.exists(), "nothing written");
+}
+
+#[tokio::test]
+async fn finished_files_carry_the_mark_of_the_web_on_windows() {
+    let f = Fixture::random(NAME, 20_000, 8);
+    let s = start(&f).await;
+    let h = Harness::new();
+    let url = s.url("/file/data.bin?token=secret");
+    let path = completed_path(h.run(&url).await.unwrap());
+    if cfg!(windows) {
+        let mut stream = path.as_os_str().to_owned();
+        stream.push(":Zone.Identifier");
+        let text = std::fs::read_to_string(&stream).unwrap();
+        let host_url = url.split('?').next().unwrap();
+        assert_eq!(
+            text,
+            format!("[ZoneTransfer]\r\nZoneId=3\r\nHostUrl={host_url}\r\n"),
+            "query (and its token) stripped"
+        );
+    }
+}
+
+/// Regression: the downloader requested the post-redirect URL directly with the user's
+/// cookies and custom headers, so a redirect to another host (a CDN) received them.
+#[tokio::test]
+async fn credentials_are_not_sent_to_another_host_after_a_redirect() {
+    let f = Fixture::random(NAME, 300_000, 6);
+    let s = start(&f).await;
+    let origin = s.url("/file/data.bin");
+    let elsewhere = origin.replace("127.0.0.1", "localhost");
+    assert_ne!(origin, elsewhere, "test server must listen on 127.0.0.1");
+    let start_url =
+        Url::parse_with_params(&s.url("/redirect-to"), &[("location", &elsewhere)]).unwrap();
+    let source = Source::Http {
+        url: start_url,
+        headers: vec![("X-Api-Key".into(), "key-123".into())],
+        cookies: Some("session=secret".into()),
+        referer: None,
+    };
+    let h = Harness::new();
+    let path = completed_path(h.run_source(source).await.unwrap());
+    assert_eq!(sha256_file(&path).await.unwrap(), f.sha256);
+
+    let requests = s.requests();
+    let (first, rest) = requests.split_first().unwrap();
+    assert_eq!(first.header("cookie"), Some("session=secret"));
+    assert_eq!(first.header("x-api-key"), Some("key-123"));
+    assert!(rest.len() >= 2, "probe and download went to the other host");
+    for r in rest {
+        assert!(r.header("host").unwrap().starts_with("localhost"), "{r:?}");
+        assert_eq!(r.header("cookie"), None, "cookie leaked: {r:?}");
+        assert_eq!(r.header("x-api-key"), None, "header leaked: {r:?}");
+    }
+}
+
+#[tokio::test]
+async fn credentials_are_kept_on_same_host_redirects() {
+    let f = Fixture::random(NAME, 300_000, 7);
+    let s = start(&f).await;
+    let source = Source::Http {
+        url: Url::parse(&s.url("/redirect/2/data.bin")).unwrap(),
+        headers: vec![("X-Api-Key".into(), "key-123".into())],
+        cookies: Some("session=secret".into()),
+        referer: None,
+    };
+    let h = Harness::new();
+    completed_path(h.run_source(source).await.unwrap());
+    for r in s.requests() {
+        assert_eq!(r.header("cookie"), Some("session=secret"), "{r:?}");
+        assert_eq!(r.header("x-api-key"), Some("key-123"), "{r:?}");
+    }
 }
 
 #[tokio::test]

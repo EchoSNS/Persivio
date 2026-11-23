@@ -14,11 +14,13 @@
 //! - [`event`]: [`EngineEvent`]s broadcast to front ends.
 //! - [`settings`]: user-tunable [`Settings`] with defaults and validation.
 //! - [`protocol`]: the [`Protocol`] trait implemented by `pv-http` and `pv-torrent`.
+//! - [`motw`]: Mark-of-the-Web text for downloaded files (Windows).
 
 pub mod checksum;
 pub mod event;
 pub mod filename;
 pub mod ids;
+pub mod motw;
 pub mod progress;
 pub mod protocol;
 pub mod settings;

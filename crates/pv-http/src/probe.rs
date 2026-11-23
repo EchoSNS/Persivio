@@ -8,7 +8,7 @@ use reqwest::header::{
 use reqwest::{Response, StatusCode};
 use url::Url;
 
-use crate::client::{DownloadRequest, HttpClient, network_error};
+use crate::client::{DownloadRequest, HttpClient};
 use crate::content_range::{ContentRange, parse_content_range};
 
 /// What the server told us about the resource.
@@ -114,11 +114,8 @@ pub(crate) fn ensure_identity(headers: &HeaderMap) -> Result<(), ProtocolError> 
 /// `Content-Range`, or a compressed body.
 pub async fn probe(client: &HttpClient, request: &DownloadRequest) -> Result<Probe, ProtocolError> {
     let response = client
-        .get(request, &request.url)
-        .header(RANGE, "bytes=0-0")
-        .send()
-        .await
-        .map_err(network_error)?;
+        .send(request, &request.url, &[(RANGE, "bytes=0-0".to_owned())])
+        .await?;
     let headers = response.headers().clone();
     ensure_identity(&headers)?;
 
@@ -167,8 +164,7 @@ pub async fn probe(client: &HttpClient, request: &DownloadRequest) -> Result<Pro
             }
         }
         status if status.is_redirection() => {
-            // reqwest hands back a redirect it refused to follow (unsafe scheme such as
-            // `file:`, or a missing/invalid Location).
+            // A 3xx that `HttpClient::send` does not follow (no usable `Location`, 300, 304).
             return Err(ProtocolError::Network(format!(
                 "redirect not followed (HTTP {}): blocked or unsupported location",
                 status.as_u16()

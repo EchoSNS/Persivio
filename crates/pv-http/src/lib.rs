@@ -10,6 +10,7 @@ pub mod client;
 pub mod content_range;
 pub mod disposition;
 pub mod filename;
+mod motw;
 pub mod probe;
 pub mod protocol;
 pub mod segmented;

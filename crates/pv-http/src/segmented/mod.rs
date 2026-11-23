@@ -412,17 +412,17 @@ fn retryable(err: ProtocolError, after: Option<Duration>, progressed: bool) -> F
 
 /// One range request for `pos..=end`, streamed into the writer.
 async fn fetch(ctx: &WorkerCtx, index: u32, pos: u64, end: u64) -> Result<(), FetchError> {
-    let request = ctx
-        .client
-        .get(&ctx.request, &ctx.url)
-        .header(RANGE, format!("bytes={pos}-{end}"))
-        .header(IF_RANGE, ctx.validator.as_str());
+    let extra = [
+        (RANGE, format!("bytes={pos}-{end}")),
+        (IF_RANGE, ctx.validator.clone()),
+    ];
+    let request = ctx.client.send(&ctx.request, &ctx.url, &extra);
     let mut response = tokio::select! {
         biased;
         () = ctx.cancel.cancelled() => return Err(FetchError::Cancelled),
-        sent = tokio::time::timeout(ctx.cfg.idle_timeout, request.send()) => match sent {
+        sent = tokio::time::timeout(ctx.cfg.idle_timeout, request) => match sent {
             Err(_) => return Err(retryable(ProtocolError::Network("timed out waiting for response".into()), None, false)),
-            Ok(Err(e)) => return Err(retryable(network_error(e), None, false)),
+            Ok(Err(e)) => return Err(retryable(e, None, false)),
             Ok(Ok(r)) => r,
         },
     };

@@ -5,4 +5,4 @@ allow-expect-in-tests = true
 
 # Proper nouns the pedantic `doc_markdown` lint would otherwise demand backticks for.
 # ".." keeps clippy's built-in defaults (GitHub, JavaScript, ...).
-doc-valid-idents = ["BitTorrent", "SQLite", "WebView2", "WebKitGTK", ".."]
+doc-valid-idents = ["SmartScreen", "BitTorrent", "SQLite", "WebView2", "WebKitGTK", ".."]

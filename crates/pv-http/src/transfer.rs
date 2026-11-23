@@ -212,14 +212,14 @@ pub async fn run_single(
 }
 
 async fn send(t: &Transfer<'_>, offset: u64) -> Result<Response, ProtocolError> {
-    let mut req = t.client.get(t.request, t.url);
+    let mut extra = Vec::new();
     if offset > 0 {
-        req = req.header(RANGE, format!("bytes={offset}-"));
+        extra.push((RANGE, format!("bytes={offset}-")));
         if let Some(v) = t.validator {
-            req = req.header(IF_RANGE, v);
+            extra.push((IF_RANGE, v.to_owned()));
         }
     }
-    req.send().await.map_err(network_error)
+    t.client.send(t.request, t.url, &extra).await
 }
 
 fn classify(

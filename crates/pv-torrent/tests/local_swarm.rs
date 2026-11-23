@@ -202,6 +202,7 @@ async fn magnet_multi_file_fetches_metadata_then_downloads() {
         sha256_file(root.join("c.txt")).await.unwrap(),
         files[2].sha256
     );
+    assert_marked(&root.join("sub/b.bin"), "about:internet");
     let phases = r.events.phases.lock().unwrap().clone();
     assert_eq!(phases, [RunPhase::FetchingMetadata, RunPhase::Downloading]);
     let meta = r.events.meta.lock().unwrap()[0].clone();
@@ -400,4 +401,15 @@ async fn deceptive_names_are_rejected_by_persivio_validation() {
     );
     assert!(r.events.meta.lock().unwrap().is_empty());
     protocol.stop().await;
+}
+
+/// On Windows, finished files carry the Mark-of-the-Web (ADR-017).
+fn assert_marked(path: &Path, host_url: &str) {
+    if cfg!(windows) {
+        let mut stream = path.as_os_str().to_owned();
+        stream.push(":Zone.Identifier");
+        let text = std::fs::read_to_string(&stream).unwrap();
+        assert!(text.contains("ZoneId=3"), "{text}");
+        assert!(text.contains(&format!("HostUrl={host_url}")), "{text}");
+    }
 }

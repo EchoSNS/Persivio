@@ -6,6 +6,7 @@
 //! mapped onto Persivio's (shared session, list-only metadata step, path validation,
 //! seeding limits, no librqbit persistence).
 
+mod motw;
 mod paths;
 mod seeding;
 #[cfg(feature = "testing")]
@@ -323,12 +324,14 @@ async fn follow(
         if !stats.finished {
             continue;
         }
-        let started = *seeding_since.get_or_insert_with(|| {
+        if seeding_since.is_none() {
+            // Every wanted piece is on disk: mark the files before anyone opens them.
+            motw::mark_all(root_path.clone()).await;
             if !ctx.settings.torrent.never_seed {
                 ctx.events.phase(RunPhase::Seeding);
             }
-            Instant::now()
-        });
+        }
+        let started = *seeding_since.get_or_insert_with(Instant::now);
         if seeding_done(
             &ctx.settings.torrent,
             stats.uploaded_bytes,

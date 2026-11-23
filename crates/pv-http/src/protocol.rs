@@ -218,6 +218,7 @@ impl Run<'_> {
         let final_name = unique_name(dest, name).await?;
         let final_path = contained_path(dest, &final_name)?;
         finalize(part, &final_path).await?;
+        crate::motw::mark(&final_path, &self.request.url).await;
         Ok(Outcome::Completed { path: final_path })
     }
 }
