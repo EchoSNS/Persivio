@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "What the main window may do. Least privilege: the app's own commands, listening to app events, the folder picker and frontend logging. No file system, shell or opener access: paths are resolved in Rust from task ids.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "dialog:allow-open",
+    "log:allow-log",
+    "allow-list-tasks",
+    "allow-add-task",
+    "allow-pause-task",
+    "allow-resume-task",
+    "allow-cancel-task",
+    "allow-remove-task",
+    "allow-pause-all",
+    "allow-resume-all",
+    "allow-move-task",
+    "allow-select-files",
+    "allow-get-settings",
+    "allow-set-settings",
+    "allow-subscribe-progress",
+    "allow-default-download-dir",
+    "allow-reveal-task"
+  ]
+}

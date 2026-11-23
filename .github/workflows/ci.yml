@@ -56,6 +56,25 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+      # The desktop app (Tauri) needs WebKitGTK on Linux, and its frontend must be
+      # built before Rust compiles: `generate_context!` embeds apps/desktop/build.
+      - name: Linux webview libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev libayatana-appindicator3-dev
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Frontend install, type check, tests, build
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests (nextest)

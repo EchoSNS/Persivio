@@ -1,0 +1,15 @@
+{
+	"extends": "$app/tsconfig",
+	"compilerOptions": {
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"checkJs": true,
+		"allowJs": true
+	},
+	"include": ["src", "*"],
+	"exclude": ["src/service-worker", "src-tauri", "build", "node_modules"]
+}

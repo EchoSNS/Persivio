@@ -27,6 +27,9 @@ structural changes.
 - Progress to the UI is batched, at most 10 Hz.
 - Every bug fix starts with a failing test.
 - Add or update an ADR for any non-obvious design decision.
+- Secrets (cookies, headers, URL passwords, torrent bytes) never cross into the webview;
+  the UI gets its own types (ADR-018). A new desktop command is added in three places:
+  the command, `build.rs` and `capabilities/main.json`.
 
 ## Commands
 
@@ -37,6 +40,9 @@ cargo nextest run --workspace
 cargo deny check
 cargo +nightly fuzz run content_range   # optional, needs cargo-fuzz (runs in CI)
 ```
+
+Desktop app (`apps/desktop`): `npm run check`, `npm test`, `npm run tauri dev`. Build the
+frontend once (`npm run build`) before compiling the workspace.
 
 ## Definition of done
 

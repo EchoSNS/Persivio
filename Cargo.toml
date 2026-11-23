@@ -8,6 +8,7 @@ members = [
     "crates/pv-engine",
     "crates/pv-testkit",
     "apps/cli",
+    "apps/desktop/src-tauri",
 ]
 # Fuzz targets build with nightly + cargo-fuzz in their own workspace.
 exclude = ["fuzz"]
@@ -73,6 +74,19 @@ md-5 = "0.11.0"
 
 # Persistence
 sqlx = { version = "0.9.1", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+
+# Desktop app (Tauri v2). tauri-specta 2 is a release candidate and requires an exact
+# specta pin (`=`): its API changes between candidates. Checked on 2026-11-23.
+tauri = "2.12.7"
+tauri-build = "2.7.6"
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-log = "2.10.2"
+tauri-plugin-notification = "2.8.1"
+tauri-plugin-opener = "2.7.3"
+tauri-plugin-single-instance = "2.5.5"
+tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.28", features = ["derive"] }
+specta-typescript = "0.0.15"
 
 # Testing
 criterion = { version = "0.8.2", default-features = false }

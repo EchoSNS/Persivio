@@ -145,7 +145,8 @@ impl Actor {
                         return;
                     }
                 },
-                _ = tick.tick() => self.publish_progress(),
+                // Only while something runs: an idle engine has no timer wake-ups.
+                _ = tick.tick(), if !self.running.is_empty() => self.publish_progress(),
             }
         }
     }

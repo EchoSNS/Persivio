@@ -15,6 +15,7 @@
 //! ```
 
 mod actor;
+mod data_dir;
 mod error;
 mod handle;
 pub mod limiter;
@@ -30,6 +31,7 @@ use pv_torrent::TorrentProtocol;
 use tokio::sync::{broadcast, mpsc};
 
 pub use actor::PROGRESS_INTERVAL;
+pub use data_dir::{DataDir, DataDirError, os_download_dir};
 pub use error::EngineError;
 pub use handle::{EngineHandle, MoveDirection};
 

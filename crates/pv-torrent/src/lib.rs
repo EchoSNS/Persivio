@@ -23,8 +23,8 @@ use async_trait::async_trait;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::limits::LimitsConfig;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ListenerMode, ListenerOptions, Magnet,
-    Session, SessionOptions, TorrentStatsState,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, DhtSessionConfig, ListenerMode,
+    ListenerOptions, Magnet, Session, SessionOptions, TorrentStatsState,
 };
 use pv_core::{
     FileEntry, Outcome, Protocol, ProtocolError, ResolvedMetadata, RunContext, RunPhase, Settings,
@@ -107,8 +107,12 @@ impl TorrentProtocol {
                     HashSet::new()
                 };
                 let opts = SessionOptions {
-                    // DHT off = `None` (tests and privacy-conscious users).
-                    dht: t.dht.then(Default::default),
+                    // DHT off = `None` (tests and privacy-conscious users). No DHT cache
+                    // file: librqbit would write it outside Persivio's folders (ADR-016).
+                    dht: t.dht.then(|| DhtSessionConfig {
+                        persistence: None,
+                        ..DhtSessionConfig::default()
+                    }),
                     // Persivio's database is the source of truth (ADR-012, ADR-016).
                     persistence: None,
                     fastresume: false,

@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 6 — HTTP and BitTorrent (magnet / .torrent) downloads with queue, limits, recovery and a CLI.
+> **Status:** Phase 7 — HTTP and BitTorrent downloads with queue, limits, recovery, a CLI, and a first desktop app (task list with live progress).
 
 ## Layout
 
@@ -17,6 +17,7 @@ Tauri v2 + Svelte 5 desktop UI.
 | `crates/pv-engine` | Engine actor: queue, scheduler, limits, recovery |
 | `crates/pv-testkit` | Test servers and fixtures (dev-only) |
 | `apps/cli` | Headless `persivio` CLI |
+| `apps/desktop` | Desktop app: Svelte 5 UI (`src/`) and Tauri shell (`src-tauri/`) |
 | `docs/` | [Architecture](docs/architecture.md), [ADRs](docs/adr/) |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for project rules and the definition of done.
@@ -25,17 +26,33 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for project rules and the definition of d
 
 - Rust via [rustup](https://rustup.rs) (the `rust-toolchain.toml` selects stable + rustfmt + clippy)
 - Windows: Visual Studio C++ Build Tools
+- Node.js 24+ (desktop app). Linux also needs `libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev`
 - `cargo install --locked cargo-nextest cargo-deny`
 
 ## Development
 
 ```sh
+# Once, and after frontend changes: the desktop crate embeds apps/desktop/build
+cd apps/desktop && npm ci && npm run build && cd ../..
+
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace
 cargo deny check
 cargo run -p persivio-cli -- --help
 ```
+
+Desktop app:
+
+```sh
+cd apps/desktop
+npm run tauri dev   # app with hot reload; regenerates src/lib/api/bindings.ts
+npm run check       # svelte-check (TypeScript strict)
+npm test            # Vitest
+```
+
+`PERSIVIO_DATA_DIR=<folder>` makes the app (and its engine) use another data folder,
+e.g. to try it without touching your real queue.
 
 ## Using the CLI
 

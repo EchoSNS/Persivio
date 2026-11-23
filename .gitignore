@@ -44,3 +44,6 @@ lcov.info
 *.swp
 .DS_Store
 Thumbs.db
+
+# Desktop frontend build output (embedded by tauri at compile time)
+apps/desktop/build/

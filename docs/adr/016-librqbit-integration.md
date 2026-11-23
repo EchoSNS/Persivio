@@ -13,7 +13,9 @@ scheduling and state (ADR-002) and its SQLite database is the source of truth (A
 1. **One shared session**, created lazily from the first torrent task's settings: listen
    port, DHT, UPnP, extra trackers, global download limit. Changing those settings takes
    effect after an app restart.
-2. **No librqbit persistence or fastresume.** Persivio stores the `.torrent` bytes and the
+2. **No librqbit persistence or fastresume.** The DHT routing-table cache is off too (librqbit
+   would write it to `%LOCALAPPDATA%qbit`, outside Persivio's folders); the cost is a
+   few seconds of DHT bootstrap per launch. Persivio stores the `.torrent` bytes and the
    info hash in `torrent_state` (via `CheckpointSink::save_torrent`). A resume re-adds
    the torrent from those bytes, with no new metadata fetch for magnets, and librqbit
    re-verifies the pieces already on disk. A paused task is removed from the session

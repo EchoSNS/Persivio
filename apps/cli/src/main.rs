@@ -7,14 +7,13 @@
 mod settings_edit;
 mod watch;
 
-use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use indicatif::HumanBytes;
 use pv_core::{Source, TaskId, TaskSnapshot, TaskSpec};
-use pv_engine::{Engine, EngineConfig, EngineHandle};
+use pv_engine::{DataDir, Engine, EngineConfig, EngineHandle};
 use url::Url;
 
 /// Command-line interface definition.
@@ -108,15 +107,11 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let data_dir = match cli.data_dir {
         Some(d) => d,
-        None => directories::ProjectDirs::from("", "", "Persivio")
-            .context("cannot determine the app data directory; pass --data-dir")?
-            .data_dir()
-            .to_path_buf(),
+        None => DataDir::default_path().context("pass --data-dir")?,
     };
-    std::fs::create_dir_all(&data_dir)
-        .with_context(|| format!("cannot create {}", data_dir.display()))?;
-    let _lock = lock_data_dir(&data_dir)?;
-    let db = data_dir.join("persivio.db");
+    // Held until exit: the app and other CLI runs cannot use the same database.
+    let data_dir = DataDir::open(data_dir)?;
+    let db = data_dir.db_path();
 
     let runs = matches!(
         cli.command,
@@ -132,19 +127,6 @@ async fn main() -> Result<()> {
     let result = run(&engine, cli.command).await;
     engine.shutdown().await;
     result
-}
-
-/// Only one Persivio process may use a data directory: two engines on one database
-/// would both "own" the same downloads.
-fn lock_data_dir(dir: &Path) -> Result<File> {
-    let file = File::create(dir.join("persivio.lock"))?;
-    match file.try_lock() {
-        Ok(()) => Ok(file),
-        Err(std::fs::TryLockError::WouldBlock) => {
-            bail!("another Persivio instance is using {}", dir.display())
-        }
-        Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
-    }
 }
 
 async fn run(engine: &EngineHandle, command: Command) -> Result<()> {
@@ -236,9 +218,8 @@ async fn default_download_dir(engine: &EngineHandle) -> Result<PathBuf> {
     if let Some(dir) = engine.settings().await?.download_dir {
         return absolute(&dir);
     }
-    let dirs = directories::UserDirs::new();
-    match dirs.as_ref().and_then(directories::UserDirs::download_dir) {
-        Some(d) => Ok(d.to_path_buf()),
+    match pv_engine::os_download_dir() {
+        Some(d) => Ok(d),
         None => absolute(Path::new(".")),
     }
 }

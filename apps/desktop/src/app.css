@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+:root {
+	color-scheme: light dark;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+@layer components {
+	.btn {
+		@apply rounded-md border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-teal-500/50 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-800;
+	}
+}

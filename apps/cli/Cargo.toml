@@ -15,7 +15,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-directories = { workspace = true }
 indicatif = { workspace = true }
 pv-core = { workspace = true }
 pv-engine = { workspace = true }
