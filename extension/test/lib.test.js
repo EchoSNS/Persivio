@@ -9,6 +9,7 @@ import {
 	describeStatus,
 	downloadPayload,
 	extensionOf,
+	handOff,
 	normalizeOptions,
 	shouldIntercept
 } from '../src/lib.js';
@@ -43,6 +44,7 @@ describe('shouldIntercept', () => {
 		assert.equal(shouldIntercept(item({ url: 'blob:https://a.example/123', filename: 'x.zip' }), paired), false);
 		assert.equal(shouldIntercept(item({ url: 'data:application/zip;base64,AA', filename: 'x.zip' }), paired), false);
 		assert.equal(shouldIntercept(item({ url: 'https://a.example/x.iso', state: 'complete' }), paired), false);
+		assert.equal(shouldIntercept(item({ url: 'https://a.example/x.iso', incognito: true }), paired), false);
 		const url = 'https://a.example/x.iso';
 		assert.equal(shouldIntercept(item({ url }), paired, new Set([url])), false);
 	});
@@ -95,5 +97,49 @@ describe('helpers', () => {
 		assert.equal(baseName('C:\\Users\\me\\f.zip'), 'f.zip');
 		assert.equal(describeStatus(401).includes('token'), true);
 		assert.equal(describeStatus(201), 'ok');
+	});
+});
+
+describe('handOff', () => {
+	function api(over = {}) {
+		const calls = [];
+		const step = (name) => async () => void calls.push(name);
+		return { calls, pause: step('pause'), resume: step('resume'), cancel: step('cancel'), erase: step('erase'), ...over };
+	}
+
+	it('cancels the browser copy only after Persivio accepted it', async () => {
+		const a = api();
+		const send = async () => {
+			a.calls.push('send');
+			return null;
+		};
+		assert.equal((await handOff(1, a, send, true)).result, 'sent');
+		assert.deepEqual(a.calls, ['pause', 'send', 'cancel', 'erase']);
+	});
+
+	it('resumes the same download when Persivio refuses or throws', async () => {
+		const throwing = async () => {
+			throw new Error('boom');
+		};
+		for (const send of [async () => 'not running', throwing]) {
+			const a = api();
+			const r = await handOff(1, a, send, true);
+			assert.equal(r.result, 'kept');
+			assert.ok(r.error);
+			assert.deepEqual(a.calls, ['pause', 'resume']);
+		}
+	});
+
+	it('respects "no fallback" and leaves finished downloads alone', async () => {
+		const a = api();
+		await handOff(1, a, async () => 'not running', false);
+		assert.deepEqual(a.calls, ['pause', 'cancel']);
+		const done = api({
+			pause: async () => {
+				throw new Error('not in progress');
+			}
+		});
+		assert.equal((await handOff(1, done, async () => null, true)).result, 'skipped');
+		assert.deepEqual(done.calls, []);
 	});
 });

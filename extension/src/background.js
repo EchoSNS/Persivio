@@ -7,6 +7,7 @@ import {
 	bridgeUrl,
 	describeStatus,
 	downloadPayload,
+	handOff,
 	isHttpUrl,
 	normalizeOptions,
 	shouldIntercept
@@ -47,6 +48,7 @@ async function sendToPersivio(download, opts) {
 	}
 }
 
+/** Opens a link in the browser's own downloader (context menu only). */
 function fallback(url, opts, reason) {
 	if (!opts.fallback) {
 		notify(`Not downloaded: ${reason}`);
@@ -57,19 +59,25 @@ function fallback(url, opts, reason) {
 	notify(`Downloading in the browser instead. ${reason}`);
 }
 
+const downloadsApi = {
+	pause: (id) => chrome.downloads.pause(id),
+	resume: (id) => chrome.downloads.resume(id),
+	cancel: (id) => chrome.downloads.cancel(id),
+	erase: (id) => chrome.downloads.erase({ id })
+};
+
 chrome.downloads.onCreated.addListener(async (item) => {
 	const opts = await options();
-	if (!shouldIntercept(item, opts, bypass)) return;
+	if (bypass.delete(item.url) || !shouldIntercept(item, opts)) return;
 	const url = item.finalUrl || item.url;
-	// Stop the browser's copy first so the file is not downloaded twice.
-	try {
-		await chrome.downloads.cancel(item.id);
-		await chrome.downloads.erase({ id: item.id });
-	} catch {
-		return; // Already finished or gone: leave it to the browser.
-	}
-	const error = await sendToPersivio({ url, referrer: item.referrer, filename: item.filename }, opts);
-	if (error) fallback(url, opts, error);
+	const { result, error } = await handOff(
+		item.id,
+		downloadsApi,
+		() => sendToPersivio({ url, referrer: item.referrer, filename: item.filename }, opts),
+		opts.fallback
+	);
+	if (result !== 'kept') return;
+	notify(opts.fallback ? `Downloading in the browser instead. ${error}` : `Not downloaded: ${error}`);
 });
 
 chrome.runtime.onInstalled.addListener(() => {

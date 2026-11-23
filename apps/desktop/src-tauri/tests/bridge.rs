@@ -325,6 +325,15 @@ fn raw_get(port: u16, token: &str) -> std::io::Result<u16> {
     Ok(reply[9..12].parse().unwrap_or(0))
 }
 
+/// Nothing listens: the connection itself is refused (a hang or bad reply would not count).
+fn refused(result: std::io::Result<u16>, what: &str) {
+    let kind = result
+        .map(|s| panic!("{what}: got HTTP {s}"))
+        .unwrap_err()
+        .kind();
+    assert_eq!(kind, std::io::ErrorKind::ConnectionRefused, "{what}");
+}
+
 fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
@@ -365,9 +374,9 @@ async fn the_supervisor_follows_the_settings_and_reports_busy_ports() {
         get(new_port, env.token.clone()).await.unwrap().unwrap(),
         200
     );
-    assert!(
-        get(port, env.token.clone()).await.unwrap().is_err(),
-        "old port closed"
+    refused(
+        get(port, env.token.clone()).await.unwrap(),
+        "old port closed",
     );
 
     // A busy port is reported, not fatal.
@@ -386,7 +395,7 @@ async fn the_supervisor_follows_the_settings_and_reports_busy_ports() {
     });
     settle().await;
     assert!(!status.lock().unwrap().running);
-    assert!(get(new_port, env.token.clone()).await.unwrap().is_err());
+    refused(get(new_port, env.token.clone()).await.unwrap(), "disabled");
 
     drop(tx);
     supervisor.await.unwrap();

@@ -59,6 +59,8 @@ export function isHttpUrl(url) {
  */
 export function shouldIntercept(item, options, bypass = new Set()) {
 	if (!options.enabled || !options.token) return false;
+	// Private windows use another cookie store and should leave no trace in the app.
+	if (item.incognito) return false;
 	const url = item.finalUrl || item.url;
 	if (!isHttpUrl(url) || bypass.has(url) || bypass.has(item.url)) return false;
 	if (item.state && item.state !== 'in_progress') return false;
@@ -129,4 +131,34 @@ export function describeStatus(status) {
 		default:
 			return `Persivio answered with HTTP ${status}.`;
 	}
+}
+
+/**
+ * Moves a running browser download to Persivio without losing it: pause, send, and only
+ * after Persivio accepted it cancel the browser's copy. On failure the same download
+ * resumes (requesting it again would break one-time links).
+ *
+ * `api` is { pause, resume, cancel, erase } taking a download id; `send` resolves to an
+ * error message or null. The result is 'sent', 'kept' (with `error`) or 'skipped'.
+ */
+export async function handOff(id, api, send, keepInBrowser) {
+	try {
+		await api.pause(id);
+	} catch {
+		return { result: 'skipped', error: null }; // already finished: the browser has it
+	}
+	let error;
+	try {
+		error = await send();
+	} catch (e) {
+		error = String(e);
+	}
+	if (error === null) {
+		await api.cancel(id).catch(() => {});
+		await api.erase(id).catch(() => {});
+		return { result: 'sent', error: null };
+	}
+	if (keepInBrowser) await api.resume(id).catch(() => {});
+	else await api.cancel(id).catch(() => {});
+	return { result: 'kept', error };
 }

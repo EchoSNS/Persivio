@@ -21,11 +21,11 @@ the reload icon on the extension's card.
 ## What it does
 
 - **Downloads you start in the browser**: files of the listed types (zip, iso, exe, mp4,
-  …) or at least the chosen size (1 MB by default) are cancelled in the browser and
-  added to Persivio instead.
+  …) or at least the chosen size (1 MB by default) move to Persivio. The
+  browser's copy is paused, and cancelled only once Persivio accepted it.
 - **Right-click a link → Download with Persivio**: always sends that link.
-- **If Persivio is not running** (or the token is wrong), the file is downloaded by the
-  browser as usual and a notification explains why. You can turn this fallback off.
+- **If Persivio is not running** (or the token is wrong), the browser simply
+  continues its download and a notification explains why. You can turn this fallback off.
 
 Small files and other types stay in the browser, so everyday downloads such as a
 receipt are not affected.

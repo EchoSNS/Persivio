@@ -17,6 +17,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Full debug info is the bulk of target/; the Linux linker died with SIGBUS (most likely
+  # a full disk). Line tables keep backtraces readable.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   RUST_BACKTRACE: 1
 
 jobs:
@@ -85,6 +88,10 @@ jobs:
       # nextest does not run doctests; run them separately.
       - name: Doctests
         run: cargo test --workspace --doc --locked
+      - name: Disk space
+        if: always()
+        shell: bash
+        run: df -h .
 
   fuzz:
     # libFuzzer needs nightly and sanitizer support, which is reliable on Linux.

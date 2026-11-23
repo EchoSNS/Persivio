@@ -1,7 +1,7 @@
 # Changelog
 
 What changed in each version of Persivio. The app shows the new entries once after an
-update (Settings → About shows them all).
+update (Settings → Updates → What's new shows them all).
 
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.

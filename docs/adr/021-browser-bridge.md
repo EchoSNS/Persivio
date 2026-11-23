@@ -45,11 +45,12 @@ Use the **localhost bridge**, opt-in (off by default), hardened as follows:
    keep them on the download's own site.
 
 The extension (Manifest V3, plain JavaScript, no build step):
-- intercepts `downloads.onCreated` for chosen file types or sizes, cancels and erases
-  the browser download, reads the URL's cookies (`cookies.getAll`), and posts them;
+- intercepts `downloads.onCreated` for chosen file types or sizes, pauses the browser
+  download, reads the URL's cookies (`cookies.getAll`), posts them, and cancels the
+  browser's copy only once Persivio accepted it (private windows are left alone);
 - offers a link context-menu entry;
-- falls back to a browser download if Persivio cannot be reached, never re-intercepting
-  that URL.
+- resumes the same browser download if Persivio cannot take it (requesting it again
+  would break one-time links).
 It talks only to `127.0.0.1`.
 
 ## Consequences
