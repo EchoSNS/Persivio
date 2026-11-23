@@ -23,12 +23,16 @@ tauri-build = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+keepawake = { workspace = true }
 pv-core = { workspace = true }
 pv-engine = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-autostart = { workspace = true }
+tauri-plugin-clipboard-manager = { workspace = true }
+tauri-plugin-deep-link = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-notification = { workspace = true }

@@ -18,6 +18,7 @@
         "height": 720,
         "minWidth": 720,
         "minHeight": 480,
+        "visible": false,
         "dragDropEnabled": false
       }
     ],
@@ -52,6 +53,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["torrent"],
+        "name": "BitTorrent file",
+        "description": "BitTorrent metadata file",
+        "mimeType": "application/x-bittorrent",
+        "role": "Viewer"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

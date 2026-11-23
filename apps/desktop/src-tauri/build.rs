@@ -20,6 +20,7 @@ const COMMANDS: &[&str] = &[
     "reveal_task",
     "get_task_detail",
     "inspect_torrent",
+    "take_external_requests",
 ];
 
 fn main() {

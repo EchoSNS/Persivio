@@ -24,6 +24,7 @@
     "allow-default-download-dir",
     "allow-reveal-task",
     "allow-get-task-detail",
-    "allow-inspect-torrent"
+    "allow-inspect-torrent",
+    "allow-take-external-requests"
   ]
 }

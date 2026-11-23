@@ -30,8 +30,11 @@ export const commands = {
 	selectFiles: (id: string, files: number[] | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("select_files", { id, files }, options),
 	/**  The current settings. */
 	getSettings: (options?: InvokeOptions) => __TAURI_INVOKE<SettingsView>("get_settings", undefined, options),
-	/**  Replaces the settings. */
-	setSettings: (settings: SettingsView, options?: InvokeOptions) => __TAURI_INVOKE<null>("set_settings", { settings }, options),
+	/**
+	 *  Replaces the settings and applies the desktop ones (tray, autostart, magnet handler,
+	 *  clipboard, sleep). Returns problems that did not prevent saving.
+	 */
+	setSettings: (settings: SettingsView, options?: InvokeOptions) => __TAURI_INVOKE<string[]>("set_settings", { settings }, options),
 	/**  Streams progress to `on_progress` (≤ 4 Hz) until the UI subscribes again. */
 	subscribeProgress: (onProgress: Channel<ProgressView[]>, options?: InvokeOptions) => __TAURI_INVOKE<null>("subscribe_progress", { onProgress }, options),
 	/**  The folder new downloads go to. */
@@ -42,11 +45,15 @@ export const commands = {
 	getTaskDetail: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<TaskDetailView>("get_task_detail", { id }, options),
 	/**  Reads a `.torrent` file (base64) without adding it, to choose files first. */
 	inspectTorrent: (data: string, options?: InvokeOptions) => __TAURI_INVOKE<TorrentInfoView>("inspect_torrent", { data }, options),
+	/**  External add requests (magnet clicks, opened .torrent files) waiting for the UI. */
+	takeExternalRequests: (options?: InvokeOptions) => __TAURI_INVOKE<ExternalAddView[]>("take_external_requests", undefined, options),
 };
 
 /** Events */
 export const events = {
+	clipboardLinksEvent: makeEvent<ClipboardLinksEvent, ClipboardLinksEvent>("clipboard-links-event"),
 	engineUiEvent: makeEvent<EngineUiEvent, EngineUiEvent>("engine-ui-event"),
+	externalRequestsEvent: makeEvent<ExternalRequestsEvent, ExternalRequestsEvent>("external-requests-event"),
 };
 
 /* Types */
@@ -102,12 +109,36 @@ export type ChecksumView = {
 	hex: string,
 };
 
+/**  Links found on the clipboard, offered to the user. */
+export type ClipboardLinksEvent = {
+	/**  http(s) and magnet links. */
+	links: string[],
+};
+
 /**  A failed command: a category and a human-readable message. */
 export type CommandError = {
 	/**  Category. */
 	kind: ErrorKind,
 	/**  Message to show. */
 	message: string,
+};
+
+/**  Desktop integration settings (mirror of `pv_core::DesktopSettings`). */
+export type DesktopSettingsView = {
+	/**  Closing the window keeps Persivio in the tray. */
+	closeToTray: boolean,
+	/**  Notify on completion. */
+	notifyOnComplete: boolean,
+	/**  Notify on failure. */
+	notifyOnFailure: boolean,
+	/**  Offer copied links. */
+	watchClipboard: boolean,
+	/**  Start with the system (in the tray). */
+	autostart: boolean,
+	/**  Keep the computer awake while downloading. */
+	preventSleep: boolean,
+	/**  Open `magnet:` links with Persivio. */
+	handleMagnetLinks: boolean,
 };
 
 /**
@@ -160,6 +191,19 @@ export type ErrorKind =
 "unavailable" | 
 /**  Anything else (database, file system). */
 "internal";
+
+/**  What an external request asks the UI to add. */
+export type ExternalAddView = {
+	/**  `http(s)` and `magnet:` links. */
+	links: string[],
+	/**  `.torrent` files. */
+	torrents: TorrentDraftView[],
+	/**  Problems to show (unreadable or oversized files). */
+	errors: string[],
+};
+
+/**  Signal: external add requests are waiting (`take_external_requests`). */
+export type ExternalRequestsEvent = null;
 
 /**  A file inside a task (one for HTTP, many for torrents). */
 export type FileView = {
@@ -248,6 +292,8 @@ export type SettingsView = {
 	categories: string[],
 	/**  BitTorrent settings. */
 	torrent: TorrentSettingsView,
+	/**  Desktop integration. */
+	desktop: DesktopSettingsView,
 };
 
 /**  Everything the detail drawer shows. Still no secrets: only whether some were sent. */
@@ -330,6 +376,14 @@ export type TaskView = {
 	completedAt: number | null,
 	/**  Category label. */
 	category: string | null,
+};
+
+/**  A `.torrent` file read for the Add dialog. */
+export type TorrentDraftView = {
+	/**  File name, for display. */
+	name: string,
+	/**  Base64 of the file's bytes (the same form the UI sends back in `AddSource`). */
+	data: string,
 };
 
 /**  A `.torrent` file's contents, shown before adding it. */

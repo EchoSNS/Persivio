@@ -32,6 +32,8 @@ allow = [
     # target-lexicon (Linux GTK build tooling via system-deps), added Phase 7
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause", # Inflector (specta-macros, desktop), added Phase 7
+    "BSL-1.0", # clipboard-win, error-code (Windows clipboard via tauri-plugin-clipboard-manager), Phase 9
+    "CC0-1.0", # tiny-keccak (public domain; build-time macro via rust-ini <- tauri-plugin-deep-link), Phase 9
     "BSD-3-Clause", # matchit (axum router, dev-only via pv-testkit), added Phase 2
     "CDLA-Permissive-2.0", # webpki-root-certs (Mozilla CA data, via rustls), added Phase 3
     "ISC", # rustls, rustls-webpki, aws-lc-rs, untrusted, added Phase 3

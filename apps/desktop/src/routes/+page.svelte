@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Download, Inbox, Pause, Play, Plus, Search, Trash2 } from '@lucide/svelte';
-	import { commands, type SettingsView } from '#lib/api/index.ts';
+	import {
+		commands,
+		errorMessage,
+		events,
+		type ExternalAddView,
+		type SettingsView
+	} from '#lib/api/index.ts';
 	import AddDialog, { type TorrentDraft } from '#lib/components/AddDialog.svelte';
 	import DetailDrawer from '#lib/components/DetailDrawer.svelte';
 	import Modal from '#lib/components/Modal.svelte';
@@ -58,18 +64,57 @@
 	onMount(() => {
 		const stopTheme = theme.start();
 		void store.connect();
+		const unlisteners = [
+			events.externalRequestsEvent.listen(() => void takeExternal()),
+			events.clipboardLinksEvent.listen((e) => {
+				const links = e.payload.links;
+				const what = links.length === 1 ? (links[0] ?? '') : `${links.length} links`;
+				toasts.offer(`Copied: ${what}`, { label: 'Add', run: () => openAdd(links) });
+			})
+		];
+		// Requests that started the app (a magnet click, an opened .torrent).
+		void takeExternal();
 		commands.getSettings().then(
 			(s) => (categories = s.categories),
 			() => {}
 		);
 		return () => {
 			stopTheme();
+			for (const u of unlisteners) void u.then((stop) => stop());
 			store.disconnect();
 		};
 	});
 
 	function openAdd(links: string[] = [], torrent: TorrentDraft | null = null) {
 		add = { open: true, links, torrent };
+	}
+
+	// External requests wait in line: one Add dialog at a time, the user confirms each.
+	const externalQueue: { links: string[]; torrent: TorrentDraft | null }[] = [];
+
+	function enqueue(view: ExternalAddView) {
+		for (const error of view.errors) toasts.error(error);
+		const [first, ...rest] = view.torrents;
+		if (view.links.length > 0 || first) externalQueue.push({ links: view.links, torrent: first ?? null });
+		for (const torrent of rest) externalQueue.push({ links: [], torrent });
+	}
+
+	function openNextExternal() {
+		if (add.open) return;
+		const next = externalQueue.shift();
+		if (next) {
+			settingsOpen = false;
+			openAdd(next.links, next.torrent);
+		}
+	}
+
+	async function takeExternal() {
+		try {
+			for (const view of await commands.takeExternalRequests()) enqueue(view);
+			openNextExternal();
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
 	}
 
 	function canPause(r: TaskRow) {
@@ -326,7 +371,10 @@
 	{categories}
 	initialLinks={add.links}
 	initialTorrent={add.torrent}
-	onclose={() => (add = { open: false, links: [], torrent: null })}
+	onclose={() => {
+		add = { open: false, links: [], torrent: null };
+		openNextExternal();
+	}}
 />
 
 <Modal

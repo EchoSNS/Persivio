@@ -18,11 +18,13 @@ use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::api::EngineApi;
+use crate::desktop::Desktop;
 use crate::dto::{
     AddRequest, MoveDirectionView, ProgressView, SettingsView, TaskDetailView, TaskView,
     TorrentInfoView,
 };
 use crate::error::CommandError;
+use crate::external::ExternalAddView;
 use crate::forward::{PROGRESS_INTERVAL, forward_progress};
 use crate::ops;
 
@@ -162,14 +164,28 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, Co
     Ok(SettingsView::from(&state.engine()?.settings().await?))
 }
 
-/// Replaces the settings.
+/// Replaces the settings and applies the desktop ones (tray, autostart, magnet handler,
+/// clipboard, sleep). Returns problems that did not prevent saving.
 #[tauri::command]
 #[specta::specta]
 pub async fn set_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
+    desktop: State<'_, Desktop>,
     settings: SettingsView,
-) -> Result<(), CommandError> {
-    ops::set_settings(state.engine()?, settings).await
+) -> Result<Vec<String>, CommandError> {
+    let wanted: pv_core::DesktopSettings = settings.desktop.clone().into();
+    ops::set_settings(state.engine()?, settings).await?;
+    desktop.settings.send_replace(wanted.clone());
+    Ok(crate::desktop::apply_os_settings(&app, &wanted))
+}
+
+/// External add requests (magnet clicks, opened .torrent files) waiting for the UI.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+pub fn take_external_requests(desktop: State<'_, Desktop>) -> Vec<ExternalAddView> {
+    desktop.take_pending()
 }
 
 /// The folder new downloads go to.

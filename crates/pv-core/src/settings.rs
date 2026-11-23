@@ -41,6 +41,8 @@ pub struct Settings {
     pub categories: Vec<String>,
     /// BitTorrent settings.
     pub torrent: TorrentSettings,
+    /// Desktop app integration (ignored by the CLI).
+    pub desktop: DesktopSettings,
 }
 
 impl Default for Settings {
@@ -60,6 +62,46 @@ impl Default for Settings {
                 .map(String::from)
                 .to_vec(),
             torrent: TorrentSettings::default(),
+            desktop: DesktopSettings::default(),
+        }
+    }
+}
+
+/// How the desktop app integrates with the operating system (Phase 9, ADR-020).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent on/off switches shown as toggles in the UI"
+)]
+pub struct DesktopSettings {
+    /// Closing the window keeps Persivio running in the system tray.
+    pub close_to_tray: bool,
+    /// Notify when a download completes.
+    pub notify_on_complete: bool,
+    /// Notify when a download fails.
+    pub notify_on_failure: bool,
+    /// Offer to add http(s) and magnet links copied to the clipboard (opt-in).
+    pub watch_clipboard: bool,
+    /// Start Persivio (minimized to the tray) when the user logs in.
+    pub autostart: bool,
+    /// Keep the computer from sleeping while downloads run.
+    pub prevent_sleep: bool,
+    /// Open `magnet:` links with Persivio (Windows and Linux; macOS asks the OS).
+    pub handle_magnet_links: bool,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            close_to_tray: true,
+            notify_on_complete: true,
+            notify_on_failure: true,
+            watch_clipboard: false,
+            autostart: false,
+            prevent_sleep: true,
+            // Opt-in: never take over another torrent client's links silently.
+            handle_magnet_links: false,
         }
     }
 }
@@ -220,6 +262,8 @@ mod tests {
         assert_eq!(s.min_segment_size, 2 * MIB);
         assert!(s.user_agent.starts_with("Persivio/"));
         assert!(!s.torrent.use_extra_trackers, "extra trackers are opt-in");
+        assert!(!s.desktop.watch_clipboard, "clipboard watching is opt-in");
+        assert!(!s.desktop.autostart && !s.desktop.handle_magnet_links);
     }
 
     #[test]

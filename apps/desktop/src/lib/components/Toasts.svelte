@@ -21,6 +21,17 @@
 		<div class="pointer-events-auto flex items-start gap-2 rounded-lg border p-3 text-sm shadow-lg {TONES[t.kind]}">
 			<Icon size={16} class="mt-0.5 shrink-0" aria-hidden="true" />
 			<p class="flex-1 break-words">{t.message}</p>
+			{#if t.action}
+				<button
+					class="btn-primary px-2 py-1"
+					onclick={() => {
+						t.action?.run();
+						toasts.dismiss(t.id);
+					}}
+				>
+					{t.action.label}
+				</button>
+			{/if}
 			<button class="icon-btn size-5" aria-label="Dismiss" onclick={() => toasts.dismiss(t.id)}>
 				<X size={14} />
 			</button>

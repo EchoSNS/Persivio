@@ -563,6 +563,71 @@ pub struct SettingsView {
     pub categories: Vec<String>,
     /// BitTorrent settings.
     pub torrent: TorrentSettingsView,
+    /// Desktop integration.
+    pub desktop: DesktopSettingsView,
+}
+
+/// Desktop integration settings (mirror of `pv_core::DesktopSettings`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent on/off switches shown as toggles"
+)]
+pub struct DesktopSettingsView {
+    /// Closing the window keeps Persivio in the tray.
+    pub close_to_tray: bool,
+    /// Notify on completion.
+    pub notify_on_complete: bool,
+    /// Notify on failure.
+    pub notify_on_failure: bool,
+    /// Offer copied links.
+    pub watch_clipboard: bool,
+    /// Start with the system (in the tray).
+    pub autostart: bool,
+    /// Keep the computer awake while downloading.
+    pub prevent_sleep: bool,
+    /// Open `magnet:` links with Persivio.
+    pub handle_magnet_links: bool,
+}
+
+impl From<&pv_core::DesktopSettings> for DesktopSettingsView {
+    fn from(d: &pv_core::DesktopSettings) -> Self {
+        Self {
+            close_to_tray: d.close_to_tray,
+            notify_on_complete: d.notify_on_complete,
+            notify_on_failure: d.notify_on_failure,
+            watch_clipboard: d.watch_clipboard,
+            autostart: d.autostart,
+            prevent_sleep: d.prevent_sleep,
+            handle_magnet_links: d.handle_magnet_links,
+        }
+    }
+}
+
+impl From<DesktopSettingsView> for pv_core::DesktopSettings {
+    fn from(d: DesktopSettingsView) -> Self {
+        Self {
+            close_to_tray: d.close_to_tray,
+            notify_on_complete: d.notify_on_complete,
+            notify_on_failure: d.notify_on_failure,
+            watch_clipboard: d.watch_clipboard,
+            autostart: d.autostart,
+            prevent_sleep: d.prevent_sleep,
+            handle_magnet_links: d.handle_magnet_links,
+        }
+    }
+}
+
+/// Signal: external add requests are waiting (`take_external_requests`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct ExternalRequestsEvent;
+
+/// Links found on the clipboard, offered to the user.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct ClipboardLinksEvent {
+    /// http(s) and magnet links.
+    pub links: Vec<String>,
 }
 
 /// BitTorrent settings (mirror of `pv_core::TorrentSettings`).
@@ -616,6 +681,7 @@ impl From<&Settings> for SettingsView {
                 use_extra_trackers: t.use_extra_trackers,
                 extra_trackers: t.extra_trackers.clone(),
             },
+            desktop: (&s.desktop).into(),
         }
     }
 }
@@ -645,6 +711,7 @@ impl From<SettingsView> for Settings {
                 use_extra_trackers: t.use_extra_trackers,
                 extra_trackers: t.extra_trackers,
             },
+            desktop: s.desktop.into(),
         }
     }
 }

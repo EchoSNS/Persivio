@@ -36,7 +36,7 @@ pub use protocol::{
     CheckpointError, CheckpointSink, Outcome, Protocol, ProtocolError, RateLimiter,
     ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, TorrentResume, Unlimited,
 };
-pub use settings::{Settings, SettingsError, TorrentSettings};
+pub use settings::{DesktopSettings, Settings, SettingsError, TorrentSettings};
 pub use source::{Source, SourceError};
 pub use state::{FailReason, InvalidTransition, TaskState, TaskStateKind, transition};
 pub use task::{

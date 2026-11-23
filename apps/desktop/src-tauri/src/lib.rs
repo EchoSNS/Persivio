@@ -8,13 +8,21 @@
 //! - Progress goes through a channel at ≤ 4 Hz, other events as typed app events
 //!   ([`forward`]).
 //! - On exit the engine is shut down gracefully, so running downloads checkpoint.
+//! - OS integration (Phase 9, ADR-020): tray, close to tray, single instance with
+//!   argument forwarding, `magnet:` handler, notifications, clipboard offers, autostart
+//!   and sleep prevention ([`desktop`], [`integration`], [`external`], [`clipboard`]).
 
 pub mod api;
+pub mod clipboard;
 pub mod commands;
+pub mod desktop;
 pub mod dto;
 pub mod error;
+pub mod external;
 pub mod forward;
+pub mod integration;
 pub mod ops;
+pub mod sleep;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,8 +62,13 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::reveal_task,
             commands::get_task_detail,
             commands::inspect_torrent,
+            commands::take_external_requests,
         ])
-        .events(collect_events![EngineUiEvent])
+        .events(collect_events![
+            EngineUiEvent,
+            dto::ExternalRequestsEvent,
+            dto::ClipboardLinksEvent
+        ])
         // Sizes/speeds are u64 byte counts, exact as JS numbers up to 8 PiB (ADR-018).
         .dangerously_cast_bigints_to_number()
         // One TypeScript type per Rust type (optional fields are `T | null`, sent explicitly).
@@ -102,12 +115,14 @@ pub fn run() -> anyhow::Result<()> {
     }
 
     let app = tauri::Builder::default()
-        // First, so a second launch exits before starting anything.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+        // First, so a second launch exits before starting anything. Its arguments (a
+        // magnet link from the browser, an opened .torrent) come here.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let view = external::resolve(external::classify_args(args.iter().skip(1)));
+            if view.is_empty() {
+                desktop::show_main_window(app);
+            } else {
+                desktop::handle_external(app, view);
             }
         }))
         .plugin(
@@ -124,38 +139,35 @@ pub fn run() -> anyhow::Result<()> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![desktop::MINIMIZED_ARG]),
+        ))
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(builder.invoke_handler())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == "main"
+                && window
+                    .try_state::<desktop::Desktop>()
+                    .is_some_and(|d| d.settings.borrow().close_to_tray)
+            {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(move |app| {
             builder.mount_events(app);
-            let engine = match start_engine() {
-                Ok((engine, data_dir)) => {
-                    // The lock lives as long as the app.
-                    app.manage(data_dir);
-                    let handle = app.handle().clone();
-                    tauri::async_runtime::spawn(forward::forward_events(
-                        engine.subscribe(),
-                        move |event| {
-                            if let Err(e) = event.emit(&handle) {
-                                tracing::warn!("cannot emit engine event: {e}");
-                            }
-                        },
-                    ));
-                    Ok(engine)
-                }
-                Err(e) => {
-                    tracing::error!("{e:#}");
-                    Err(format!("{e:#}"))
-                }
-            };
-            app.manage(AppState::new(engine));
+            setup(app);
             Ok(())
         })
         .build(tauri::generate_context!())
         .context("cannot start the app")?;
 
     let shutting_down = AtomicBool::new(false);
-    app.run(move |app, event| {
-        if let RunEvent::ExitRequested { api, .. } = event {
+    app.run(move |app, event| match event {
+        RunEvent::ExitRequested { api, .. } => {
             // Let running downloads checkpoint before the process ends; the second
             // request (from `app.exit` below) goes through.
             if shutting_down.swap(true, Ordering::SeqCst) {
@@ -170,8 +182,87 @@ pub fn run() -> anyhow::Result<()> {
                 });
             }
         }
+        // macOS delivers magnet links and opened .torrent files as events, not arguments.
+        #[cfg(target_os = "macos")]
+        RunEvent::Opened { urls } => {
+            let view = external::resolve(external::classify_args(urls.iter().map(|u| u.as_str())));
+            desktop::handle_external(app, view);
+        }
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => desktop::show_main_window(app),
+        _ => {}
     });
     Ok(())
+}
+
+/// Starts the engine and the desktop integration. Never fails: without an engine the app
+/// still opens (and quits from the tray) and the UI explains the problem.
+fn setup(app: &mut tauri::App) {
+    let handle = app.handle().clone();
+    let started = start_engine();
+    let (engine, settings, tasks) = match started {
+        Ok((engine, data_dir)) => {
+            // The lock lives as long as the app.
+            app.manage(data_dir);
+            let settings = tauri::async_runtime::block_on(engine.settings()).unwrap_or_default();
+            let tasks = tauri::async_runtime::block_on(engine.list()).unwrap_or_default();
+            let emitter = handle.clone();
+            tauri::async_runtime::spawn(forward::forward_events(
+                engine.subscribe(),
+                move |event| {
+                    if let Err(e) = event.emit(&emitter) {
+                        tracing::warn!("cannot emit engine event: {e}");
+                    }
+                },
+            ));
+            (Ok(engine), settings, tasks)
+        }
+        Err(e) => {
+            tracing::error!("{e:#}");
+            (
+                Err(format!("{e:#}")),
+                pv_core::Settings::default(),
+                Vec::new(),
+            )
+        }
+    };
+
+    let desktop = desktop::Desktop::new(settings.desktop.clone());
+    let settings_rx = desktop.settings.subscribe();
+    app.manage(desktop);
+    for problem in desktop::apply_os_settings(&handle, &settings.desktop) {
+        tracing::warn!("{problem}");
+    }
+    if let Err(e) = desktop::build_tray(&handle) {
+        tracing::warn!("no tray icon: {e}");
+    }
+    if let Ok(engine) = &engine {
+        tauri::async_runtime::spawn(integration::run(
+            engine.subscribe(),
+            settings_rx.clone(),
+            integration::Activity::new(&tasks),
+            desktop::AppSink::new(handle.clone()),
+        ));
+    }
+    let reader = handle.clone();
+    let offerer = handle.clone();
+    tauri::async_runtime::spawn(clipboard::watch_clipboard(
+        move || {
+            use tauri_plugin_clipboard_manager::ClipboardExt as _;
+            reader.clipboard().read_text().ok()
+        },
+        settings_rx,
+        move |links| desktop::offer_clipboard_links(&offerer, links),
+    ));
+    app.manage(AppState::new(engine));
+
+    // The window starts hidden (no flash); autostart keeps it in the tray.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.iter().any(|a| a == desktop::MINIMIZED_ARG) {
+        desktop::show_main_window(&handle);
+    }
+    // Launched by a magnet click or an opened .torrent: queue it for the UI.
+    desktop::handle_external(&handle, external::resolve(external::classify_args(&args)));
 }
 
 fn log_level() -> tauri_plugin_log::log::LevelFilter {

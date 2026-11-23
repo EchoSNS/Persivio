@@ -1,0 +1,111 @@
+# Manual tests
+
+Things automated tests cannot cover: OS shell integration, real browsers and real
+networks. Run them before a release, on each OS listed. Use a separate data folder so
+your real queue is untouched:
+
+```powershell
+# Windows (PowerShell)
+$env:PERSIVIO_DATA_DIR = "$env:TEMP\persivio-manual"
+```
+```sh
+# macOS / Linux
+export PERSIVIO_DATA_DIR=/tmp/persivio-manual
+```
+
+Build the app first: `cd apps/desktop && npm run tauri dev` (or `npx tauri build` for an
+installer; file associations and macOS URL schemes only exist in installed builds).
+
+Record results in the table at the end (date, OS, version, pass/fail, notes).
+
+## 1. Tray and window
+
+| # | Steps | Expected |
+|---|---|---|
+| 1.1 | Start the app. | Window opens; a Persivio tray icon appears (macOS: menu bar). |
+| 1.2 | Hover the tray icon with nothing downloading. | Tooltip "Persivio: idle" (Linux trays may show no tooltip). |
+| 1.3 | Start a large download, hover the icon. | "Persivio: 1 active" and the download speed, updated about once a second. |
+| 1.4 | Close the window (X). | Window hides; the app keeps downloading; the tray icon stays. |
+| 1.5 | Left-click the tray icon. | Window comes back. |
+| 1.6 | Tray menu → Pause all, then Resume all. | Downloads pause, then resume. |
+| 1.7 | Settings → Desktop → untick "Keep running in the system tray…", save, close the window. | The app quits (gracefully: resumes later where it stopped). |
+| 1.8 | Tray menu → Quit while downloading. | App exits within a few seconds; on restart the download is paused with its progress kept. |
+
+## 2. Single instance and magnet links
+
+| # | Steps | Expected |
+|---|---|---|
+| 2.1 | With the app running, start it again (Start menu / Dock / terminal). | No second window; the existing window comes to the front. |
+| 2.2 | Settings → Desktop → tick "Open magnet links with Persivio", save. | Saved without a warning (Windows, Linux). |
+| 2.3 | In Brave (or any browser), click a magnet link, e.g. on the official torrent page of a Linux distribution. Allow the browser's "Open Persivio?" prompt. | The running Persivio comes to the front with the Add dialog prefilled with the link. Nothing downloads until **Add** is clicked. |
+| 2.4 | Close Persivio completely (tray → Quit) and click the magnet link again. | Persivio starts and shows the same prefilled dialog. |
+| 2.5 | Untick the setting and save. Click a magnet link. | The browser no longer offers Persivio (another torrent client may open, if installed). |
+| 2.6 | If another torrent client is the magnet handler and the setting is **off**, save settings. | The other client still opens magnet links (Persivio removes only its own registration). |
+| 2.7 | macOS: install the app, set Persivio as the magnet handler (e.g. through another app's preference or a tool like `duti`), click a magnet link. | Same as 2.3. |
+
+## 3. .torrent files
+
+| # | Steps | Expected |
+|---|---|---|
+| 3.1 | Installed build: double-click a `.torrent` file (or "Open with → Persivio"). | Add dialog with the torrent's name, size and file list; files can be unticked. |
+| 3.2 | Drag a `.torrent` file onto the window. | Same as 3.1. |
+| 3.3 | Drag a link from Brave onto the window. | Add dialog with the link. |
+| 3.4 | Open two `.torrent` files at once. | Two dialogs, one after the other. |
+
+## 4. Notifications
+
+| # | Steps | Expected |
+|---|---|---|
+| 4.1 | Start a small download, switch to another app before it finishes. | "Download complete: <name>" notification. |
+| 4.2 | Same, with the Persivio window in front. | No notification (the list shows it). |
+| 4.3 | Add `https://127.0.0.1:9/x` (nothing listens there), switch away. | "Download failed: …" notification after the retries. |
+| 4.4 | Untick both notification settings and repeat 4.1. | No notification. |
+| 4.5 | First notification on macOS/Windows. | The OS may ask for permission; allowing it shows the notification. |
+
+## 5. Clipboard
+
+| # | Steps | Expected |
+|---|---|---|
+| 5.1 | Setting off (default). Copy a link. | Nothing happens. |
+| 5.2 | Tick "Offer to add links I copy", save. Copy `https://example.com/file.iso` in Brave. | Within about a second, a toast "Copied: https://example.com/file.iso" with **Add**. |
+| 5.3 | Click **Add**. | Add dialog with the link. |
+| 5.4 | Copy plain text, or the same link again. | No toast. |
+| 5.5 | Ctrl+V in the window (any setting). | Add dialog with the pasted links. |
+
+## 6. Autostart
+
+| # | Steps | Expected |
+|---|---|---|
+| 6.1 | Tick "Start Persivio when I sign in", save. | Windows: Settings → Apps → Startup lists Persivio. macOS: Login Items. Linux: `~/.config/autostart/` has an entry. |
+| 6.2 | Sign out and in. | Persivio starts in the tray, window hidden. |
+| 6.3 | Untick and save. | The entry is removed. |
+
+## 7. Sleep prevention
+
+| # | Steps | Expected |
+|---|---|---|
+| 7.1 | Start a long download. Windows: `powercfg /requests` (admin terminal). macOS: `pmset -g assertions`. Linux: `systemd-inhibit --list`. | A request from Persivio ("Downloads in progress"). |
+| 7.2 | Pause all downloads, check again. | The request is gone. |
+| 7.3 | Untick "Keep the computer awake…" while downloading, save, check again. | The request is gone immediately. |
+
+## 8. Interface (Phase 8)
+
+| # | Steps | Expected |
+|---|---|---|
+| 8.1 | Create 500 paused tasks with the CLI (below), start the app with the same `PERSIVIO_DATA_DIR`, scroll quickly. | Smooth scrolling, no blank rows. |
+| 8.2 | Settings → Appearance → Light, Dark, System. | All screens readable in each; System follows the OS setting live. |
+| 8.3 | Use only the keyboard: Tab, arrows, Space, Enter, Delete, Ctrl+A, Ctrl+N, Esc. | Every core action is possible; focus is always visible. |
+
+To create 500 paused tasks (PowerShell, with `PERSIVIO_DATA_DIR` set as above):
+
+```powershell
+$urls = 1..500 | ForEach-Object { "http://127.0.0.1:9/sample-file-$_.iso" }
+cargo run --release -p persivio-cli -- add @urls --dir "$env:TEMP\persivio-manual-dl" --no-wait
+cargo run --release -p persivio-cli -- pause all
+```
+
+## Results
+
+| Date | OS / version | App version | Sections | Result | Notes |
+|---|---|---|---|---|---|
+| 2026-11-23 | Windows 11 Pro | 0.1.0 (dev) | 2.1, 2.3 (simulated: second launch with a magnet argument), 1.4, 1.5 (relaunch shows the window), autostart `--minimized` start | Pass | Registry registration (2.2) and a real browser click are left to the user. |

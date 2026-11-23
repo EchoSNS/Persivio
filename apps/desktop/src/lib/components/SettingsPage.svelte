@@ -67,10 +67,11 @@
 		}
 		saving = true;
 		try {
-			await commands.setSettings(next);
+			const problems = await commands.setSettings(next);
 			reset(next);
 			onsaved(next);
 			toasts.info('Settings saved');
+			for (const problem of problems) toasts.warn(problem);
 		} catch (err) {
 			error = errorMessage(err);
 		} finally {
@@ -95,6 +96,36 @@
 		newCategory = '';
 		error = null;
 	}
+
+	const DESKTOP_TOGGLES: { key: keyof SettingsView['desktop']; label: string; hint?: string }[] = [
+		{
+			key: 'closeToTray',
+			label: 'Keep running in the system tray when the window is closed',
+			hint: 'Quit from the tray icon menu.'
+		},
+		{ key: 'notifyOnComplete', label: 'Notify when a download completes' },
+		{ key: 'notifyOnFailure', label: 'Notify when a download fails' },
+		{
+			key: 'preventSleep',
+			label: 'Keep the computer awake while downloading',
+			hint: 'The screen may still turn off; only sleep is prevented.'
+		},
+		{
+			key: 'watchClipboard',
+			label: 'Offer to add links I copy',
+			hint: 'Checks copied text once a second for http(s) and magnet links. Nothing is added without your click, and the text is never stored.'
+		},
+		{
+			key: 'autostart',
+			label: 'Start Persivio when I sign in',
+			hint: 'Starts minimized to the tray.'
+		},
+		{
+			key: 'handleMagnetLinks',
+			label: 'Open magnet links with Persivio',
+			hint: 'Windows and Linux. On macOS, choose Persivio as the magnet handler in another torrent app or the system. Turning this off only removes Persivio\x27s own registration.'
+		}
+	];
 
 	const THEMES: { value: ThemeChoice; label: string; Icon: typeof Sun }[] = [
 		{ value: 'system', label: 'System', Icon: Monitor },
@@ -216,6 +247,21 @@
 						Ask the router to open the port (UPnP)
 					</label>
 					<p class="hint">Port, DHT and UPnP changes take effect after restarting the app.</p>
+				</div>
+			</section>
+
+			<section class="panel p-4">
+				{@render section('Desktop')}
+				<div class="space-y-2.5">
+					{#each DESKTOP_TOGGLES as t (t.key)}
+						<label class="flex items-start gap-2 text-sm">
+							<input type="checkbox" class="mt-0.5 accent-teal-600" bind:checked={draft.desktop[t.key]} />
+							<span>
+								{t.label}
+								{#if t.hint}<span class="hint block">{t.hint}</span>{/if}
+							</span>
+						</label>
+					{/each}
 				</div>
 			</section>
 
