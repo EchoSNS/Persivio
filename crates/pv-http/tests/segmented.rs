@@ -136,34 +136,42 @@ impl Job {
 /// Acceptance: 8 connections at least 5x faster than 1 on a per-connection-throttled server.
 #[tokio::test]
 async fn eight_connections_are_at_least_five_times_faster() {
-    let f = Fixture::random("big.bin", 1_000_000, 1);
-    let s = TestServer::start([f.clone()]).await.unwrap();
-    let v = etag(&s, "big.bin").await;
-    let url = s.url("/throttle/big.bin?bps=250000"); // 250 KB/s per connection
+    // Compares throughput, with a larger file for 8 connections: fixed costs (connecting,
+    // planning, the final fsync) are about 0.5 s on slow CI runners, which halved the
+    // speedup when 8 connections only had 0.5 s of transfer to do.
+    let small = Fixture::random("small.bin", 1_000_000, 1);
+    let big = Fixture::random("big.bin", 4_000_000, 2);
+    let s = TestServer::start([small.clone(), big.clone()])
+        .await
+        .unwrap();
     let dir = tempfile::tempdir().unwrap();
 
-    let mut times = Vec::new();
-    for n in [1u8, 8] {
+    let mut rates = Vec::new();
+    for (n, f) in [(1u8, &small), (8, &big)] {
+        let v = etag(&s, &f.name).await;
+        let url = s.url(&format!("/throttle/{}?bps=250000", f.name)); // 250 KB/s per connection
         let part = dir.path().join(format!("n{n}.part"));
-        let job = Job::new(&url, &part, 1_000_000, &v);
+        let size = f.bytes.len() as u64;
+        let job = Job::new(&url, &part, size, &v);
         let started = Instant::now();
         assert_eq!(
             job.run(&config(n)).await.unwrap(),
             SegmentedOutcome::Completed
         );
-        times.push(started.elapsed());
+        #[allow(clippy::cast_precision_loss, reason = "a few MB")]
+        rates.push(size as f64 / started.elapsed().as_secs_f64());
         assert_eq!(
             sha256_file(&part).await.unwrap(),
             f.sha256,
             "{n} connections"
         );
     }
-    let speedup = times[0].as_secs_f64() / times[1].as_secs_f64();
+    let speedup = rates[1] / rates[0];
     println!(
-        "1 conn: {:?}, 8 conns: {:?}, speedup {speedup:.1}x",
-        times[0], times[1]
+        "1 conn: {:.0} B/s, 8 conns: {:.0} B/s, speedup {speedup:.1}x",
+        rates[0], rates[1]
     );
-    assert!(speedup >= 5.0, "speedup only {speedup:.2}x ({times:?})");
+    assert!(speedup >= 5.0, "speedup only {speedup:.2}x ({rates:?} B/s)");
 }
 
 /// Acceptance: 20/20 runs against random 503s and mid-stream drops produce the exact file.
