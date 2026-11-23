@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Persivio extension options</title>
+		<link rel="stylesheet" href="options.css" />
+	</head>
+	<body>
+		<main>
+			<h1>Persivio</h1>
+			<p class="muted">Send downloads from this browser to the Persivio download manager.</p>
+
+			<form id="form">
+				<label class="row"><input type="checkbox" id="enabled" /> Send downloads to Persivio</label>
+
+				<label for="token">Pairing token</label>
+				<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste from Persivio → Settings → Browser integration" />
+
+				<label for="port">Port</label>
+				<input id="port" type="number" min="1024" max="65535" />
+
+				<label for="minSizeMb">Take over downloads of at least (MB)</label>
+				<input id="minSizeMb" type="number" min="0" step="0.5" />
+
+				<label for="extensions">…and always these file types (comma-separated)</label>
+				<input id="extensions" type="text" spellcheck="false" />
+
+				<label class="row"><input type="checkbox" id="fallback" /> Download in the browser if Persivio is not reachable</label>
+
+				<div class="actions">
+					<button type="submit">Save</button>
+					<button type="button" id="test">Test connection</button>
+				</div>
+				<p id="status" role="status" aria-live="polite"></p>
+			</form>
+
+			<p class="muted small">
+				The extension talks only to Persivio on this computer (127.0.0.1). It reads cookies only for a
+				download it sends, so files behind a login work.
+			</p>
+		</main>
+		<script type="module" src="options.js"></script>
+	</body>
+</html>

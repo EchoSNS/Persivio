@@ -47,6 +47,21 @@ export const commands = {
 	inspectTorrent: (data: string, options?: InvokeOptions) => __TAURI_INVOKE<TorrentInfoView>("inspect_torrent", { data }, options),
 	/**  External add requests (magnet clicks, opened .torrent files) waiting for the UI. */
 	takeExternalRequests: (options?: InvokeOptions) => __TAURI_INVOKE<ExternalAddView[]>("take_external_requests", undefined, options),
+	/**  Whether the browser bridge listens (and why not). */
+	bridgeStatus: (options?: InvokeOptions) => __TAURI_INVOKE<BridgeStatus>("bridge_status", undefined, options),
+	/**  A fresh pairing token for the browser extension (saved with the settings). */
+	newBridgeToken: (options?: InvokeOptions) => __TAURI_INVOKE<string>("new_bridge_token", undefined, options),
+	/**  Release notes of every version, newest first (for "What's new"). */
+	releaseNotes: (options?: InvokeOptions) => __TAURI_INVOKE<ReleaseNotesView[]>("release_notes", undefined, options),
+	/**  The running app's version. */
+	appVersion: (options?: InvokeOptions) => __TAURI_INVOKE<string>("app_version", undefined, options),
+	/**  Checks for a newer version. */
+	checkForUpdate: (options?: InvokeOptions) => __TAURI_INVOKE<UpdateView | null>("check_for_update", undefined, options),
+	/**
+	 *  Downloads and verifies the update found by `check_for_update`, stops the engine
+	 *  gracefully (downloads checkpoint), installs it and restarts the app.
+	 */
+	installUpdate: (onProgress: Channel<UpdateProgress>, options?: InvokeOptions) => __TAURI_INVOKE<null>("install_update", { onProgress }, options),
 };
 
 /** Events */
@@ -54,6 +69,7 @@ export const events = {
 	clipboardLinksEvent: makeEvent<ClipboardLinksEvent, ClipboardLinksEvent>("clipboard-links-event"),
 	engineUiEvent: makeEvent<EngineUiEvent, EngineUiEvent>("engine-ui-event"),
 	externalRequestsEvent: makeEvent<ExternalRequestsEvent, ExternalRequestsEvent>("external-requests-event"),
+	updateAvailableEvent: makeEvent<UpdateAvailableEvent, UpdateAvailableEvent>("update-available-event"),
 };
 
 /* Types */
@@ -93,6 +109,14 @@ url: string } |
 { type: "torrent_file"; 
 /**  Base64 of the file's bytes. */
 data: string };
+
+/**  Whether the bridge runs, for the settings page. */
+export type BridgeStatus = {
+	/**  Listening now. */
+	running: boolean,
+	/**  Why it could not start (e.g. the port is in use). */
+	error: string | null,
+};
 
 /**  Checksum algorithm. */
 export type ChecksumAlgorithmView = 
@@ -139,6 +163,14 @@ export type DesktopSettingsView = {
 	preventSleep: boolean,
 	/**  Open `magnet:` links with Persivio. */
 	handleMagnetLinks: boolean,
+	/**  Accept downloads from the browser extension. */
+	browserBridge: boolean,
+	/**  Bridge port on 127.0.0.1. */
+	bridgePort: number,
+	/**  Pairing token to paste into the extension (empty until the bridge is enabled). */
+	bridgeToken: string,
+	/**  Check for updates at startup. */
+	checkForUpdates: boolean,
 };
 
 /**
@@ -236,6 +268,14 @@ export type MoveDirectionView =
 /**  Last. */
 "bottom";
 
+/**  A titled list of changes. */
+export type NotesSection = {
+	/**  `Added`, `Changed`, `Fixed`, `Security`, … */
+	title: string,
+	/**  One entry per change (plain text; markdown markers removed). */
+	items: string[],
+};
+
 /**  Live progress of one task. */
 export type ProgressView = {
 	/**  Task id. */
@@ -254,6 +294,16 @@ export type ProgressView = {
 	peers: number | null,
 	/**  Torrent: upload speed, bytes/second. */
 	uploadBps: number | null,
+};
+
+/**  One release's notes. */
+export type ReleaseNotesView = {
+	/**  Version, e.g. `0.2.0`. */
+	version: string,
+	/**  Release date as written (`YYYY-MM-DD`). */
+	date: string,
+	/**  Sections in order (`Added`, `Fixed`, …), each with its items. */
+	sections: NotesSection[],
 };
 
 /**  One HTTP segment, for the segment bar. */
@@ -416,6 +466,32 @@ export type TorrentSettingsView = {
 	useExtraTrackers: boolean,
 	/**  Additional tracker URLs. */
 	extraTrackers: string[],
+};
+
+/**  Notifies the UI that an update is available (startup check). */
+export type UpdateAvailableEvent = UpdateView;
+
+/**  Install progress. */
+export type UpdateProgress = 
+/**  Bytes downloaded so far. */
+{ type: "downloading"; 
+/**  Downloaded bytes. */
+downloaded: number; 
+/**  Total, if known. */
+total: number | null } | 
+/**  Download verified; stopping downloads and installing. */
+{ type: "installing" };
+
+/**  An available update, as the UI shows it. */
+export type UpdateView = {
+	/**  New version. */
+	version: string,
+	/**  Installed version. */
+	currentVersion: string,
+	/**  Release date, if published. */
+	date: string | null,
+	/**  Release notes from the update manifest. */
+	notes: string | null,
 };
 
 /* Tauri Specta runtime */

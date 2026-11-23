@@ -67,6 +67,11 @@ impl Default for Settings {
     }
 }
 
+/// Default loopback port of the browser bridge.
+pub const DEFAULT_BRIDGE_PORT: u16 = 47_321;
+/// Shortest accepted bridge token (hex characters = 128 bits).
+pub const MIN_BRIDGE_TOKEN_LEN: usize = 32;
+
 /// How the desktop app integrates with the operating system (Phase 9, ADR-020).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -89,6 +94,14 @@ pub struct DesktopSettings {
     pub prevent_sleep: bool,
     /// Open `magnet:` links with Persivio (Windows and Linux; macOS asks the OS).
     pub handle_magnet_links: bool,
+    /// Accept downloads from the browser extension on 127.0.0.1 (Phase 10, ADR-021).
+    pub browser_bridge: bool,
+    /// Loopback port of the browser bridge.
+    pub bridge_port: u16,
+    /// Pairing token the extension must send (hex). Generated when the bridge is enabled.
+    pub bridge_token: String,
+    /// Check for app updates at startup.
+    pub check_for_updates: bool,
 }
 
 impl Default for DesktopSettings {
@@ -102,6 +115,10 @@ impl Default for DesktopSettings {
             prevent_sleep: true,
             // Opt-in: never take over another torrent client's links silently.
             handle_magnet_links: false,
+            browser_bridge: false,
+            bridge_port: DEFAULT_BRIDGE_PORT,
+            bridge_token: String::new(),
+            check_for_updates: true,
         }
     }
 }
@@ -210,6 +227,22 @@ impl Settings {
         if let Some(message) = category_problem(&self.categories) {
             return Err(SettingsError::new("categories", message));
         }
+        let d = &self.desktop;
+        if d.bridge_port < 1024 {
+            return Err(SettingsError::new(
+                "desktop.bridge_port",
+                "must be 1024..=65535",
+            ));
+        }
+        let token_ok = d.bridge_token.is_empty()
+            || (d.bridge_token.len() >= MIN_BRIDGE_TOKEN_LEN
+                && d.bridge_token.bytes().all(|b| b.is_ascii_hexdigit()));
+        if !token_ok || (d.browser_bridge && d.bridge_token.is_empty()) {
+            return Err(SettingsError::new(
+                "desktop.bridge_token",
+                format!("must be at least {MIN_BRIDGE_TOKEN_LEN} hex characters"),
+            ));
+        }
         if self.torrent.listen_port == Some(0) {
             return Err(SettingsError::new(
                 "torrent.listen_port",
@@ -269,7 +302,12 @@ mod tests {
     #[test]
     fn validation_rejects_out_of_range_values() {
         type Mutate = fn(&mut Settings);
-        let cases: [(&str, Mutate); 12] = [
+        let cases: [(&str, Mutate); 15] = [
+            ("desktop.bridge_port", |s| s.desktop.bridge_port = 80),
+            ("desktop.bridge_token", |s| {
+                s.desktop.bridge_token = "abc".into();
+            }),
+            ("desktop.bridge_token", |s| s.desktop.browser_bridge = true),
             ("categories", |s| s.categories = vec![" Video".into()]),
             ("categories", |s| {
                 s.categories = vec!["A".into(), "a".into()];

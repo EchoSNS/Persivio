@@ -38,4 +38,4 @@ mod server;
 
 pub use fixture::{Fixture, sha256_file, sha256_hex};
 pub use rng::SplitMix64;
-pub use server::{RecordedRequest, TestServer};
+pub use server::{AUTH_COOKIE, RecordedRequest, TestServer};

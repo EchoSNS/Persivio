@@ -1,12 +1,72 @@
 <script lang="ts">
 	import { open as openDialog } from '@tauri-apps/plugin-dialog';
-	import { FolderOpen, Monitor, Moon, Plus, Sun, X } from '@lucide/svelte';
-	import { commands, errorMessage, type SettingsView } from '#lib/api/index.ts';
+	import { Copy, FolderOpen, Monitor, Moon, Plus, RefreshCw, Sun, X } from '@lucide/svelte';
+	import {
+		commands,
+		errorMessage,
+		type BridgeStatus,
+		type SettingsView,
+		type UpdateView
+	} from '#lib/api/index.ts';
 	import { SHORTCUTS } from '#lib/shortcuts.ts';
 	import { theme, type ThemeChoice } from '#lib/stores/theme.svelte.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 
-	let { onsaved }: { onsaved: (s: SettingsView) => void } = $props();
+	type Props = {
+		onsaved: (s: SettingsView) => void;
+		onupdate: (u: UpdateView) => void;
+		onshownotes: () => void;
+	};
+	let { onsaved, onupdate, onshownotes }: Props = $props();
+
+	let bridge = $state<BridgeStatus | null>(null);
+	let version = $state('');
+	let checking = $state(false);
+
+	$effect(() => {
+		commands.appVersion().then((v) => (version = v));
+		refreshBridge();
+	});
+
+	function refreshBridge() {
+		commands.bridgeStatus().then(
+			(s) => (bridge = s),
+			() => {}
+		);
+	}
+
+	async function copyToken() {
+		if (!draft) return;
+		try {
+			await navigator.clipboard.writeText(draft.desktop.bridgeToken);
+			toasts.info('Token copied');
+		} catch {
+			toasts.warn('Copy failed: select the token and copy it manually.');
+		}
+	}
+
+	async function newToken() {
+		if (!draft) return;
+		try {
+			draft.desktop.bridgeToken = await commands.newBridgeToken();
+			toasts.info('New token: save, then paste it into the extension.');
+		} catch (e) {
+			error = errorMessage(e);
+		}
+	}
+
+	async function checkNow() {
+		checking = true;
+		try {
+			const found = await commands.checkForUpdate();
+			if (found) onupdate(found);
+			else toasts.info('Persivio is up to date.');
+		} catch (e) {
+			toasts.warn(errorMessage(e));
+		} finally {
+			checking = false;
+		}
+	}
 
 	let saved = $state<SettingsView | null>(null);
 	let draft = $state<SettingsView | null>(null);
@@ -68,8 +128,11 @@
 		saving = true;
 		try {
 			const problems = await commands.setSettings(next);
-			reset(next);
-			onsaved(next);
+			// Reload: saving may have created the bridge token.
+			const fresh = await commands.getSettings();
+			reset(fresh);
+			onsaved(fresh);
+			setTimeout(refreshBridge, 300);
 			toasts.info('Settings saved');
 			for (const problem of problems) toasts.warn(problem);
 		} catch (err) {
@@ -97,7 +160,10 @@
 		error = null;
 	}
 
-	const DESKTOP_TOGGLES: { key: keyof SettingsView['desktop']; label: string; hint?: string }[] = [
+	type Desktop = SettingsView['desktop'];
+	/** Desktop settings that are on/off switches. */
+	type DesktopSwitch = { [K in keyof Desktop]: Desktop[K] extends boolean ? K : never }[keyof Desktop];
+	const DESKTOP_TOGGLES: { key: DesktopSwitch; label: string; hint?: string }[] = [
 		{
 			key: 'closeToTray',
 			label: 'Keep running in the system tray when the window is closed',
@@ -297,6 +363,73 @@
 						}}
 					/>
 					<button type="button" class="btn shrink-0" onclick={addCategory}><Plus size={14} /> Add</button>
+				</div>
+			</section>
+
+			<section class="panel p-4">
+				{@render section('Browser integration')}
+				<div class="space-y-3">
+					<label class="flex items-start gap-2 text-sm">
+						<input type="checkbox" class="mt-0.5 accent-teal-600" bind:checked={draft.desktop.browserBridge} />
+						<span>
+							Accept downloads from the Persivio browser extension
+							<span class="hint block">
+								Listens on this computer only (127.0.0.1). The extension must send the pairing token below.
+							</span>
+						</span>
+					</label>
+					<div class="grid gap-3 sm:grid-cols-[8rem_1fr]">
+						<div>
+							<label class="label" for="s-bport">Port</label>
+							<input id="s-bport" class="input" type="number" min="1024" max="65535" bind:value={draft.desktop.bridgePort} />
+						</div>
+						<div>
+							<label class="label" for="s-btoken">Pairing token</label>
+							<div class="flex gap-2">
+								<input
+									id="s-btoken"
+									class="input font-mono text-xs"
+									readonly
+									placeholder="Created when you save with the bridge on"
+									value={draft.desktop.bridgeToken}
+								/>
+								<button type="button" class="btn shrink-0" disabled={!draft.desktop.bridgeToken} onclick={copyToken}>
+									<Copy size={14} /> Copy
+								</button>
+								<button type="button" class="btn shrink-0" onclick={newToken} title="The extension must be paired again">
+									<RefreshCw size={14} /> New
+								</button>
+							</div>
+						</div>
+					</div>
+					<p class="text-xs {bridge?.error ? 'text-red-600 dark:text-red-400' : 'text-zinc-500'}">
+						{bridge?.running
+							? `Running on 127.0.0.1:${saved?.desktop.bridgePort}.`
+							: bridge?.error
+								? bridge.error
+								: 'Not running.'}
+					</p>
+					<p class="hint">
+						Install the extension from the <code>extension</code> folder (see its README), then paste the
+						token in its options.
+					</p>
+				</div>
+			</section>
+
+			<section class="panel p-4">
+				{@render section('Updates')}
+				<div class="space-y-3">
+					<p class="text-sm">Persivio {version}</p>
+					<label class="flex items-center gap-2 text-sm">
+						<input type="checkbox" class="accent-teal-600" bind:checked={draft.desktop.checkForUpdates} />
+						Check for updates when Persivio starts
+					</label>
+					<div class="flex gap-2">
+						<button type="button" class="btn" disabled={checking} onclick={checkNow}>
+							<RefreshCw size={14} /> {checking ? 'Checking…' : 'Check now'}
+						</button>
+						<button type="button" class="btn" onclick={onshownotes}>What's new</button>
+					</div>
 				</div>
 			</section>
 		{/if}

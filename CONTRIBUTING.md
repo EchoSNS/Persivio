@@ -27,6 +27,8 @@ structural changes.
 - Progress to the UI is batched, at most 10 Hz.
 - Every bug fix starts with a failing test.
 - Add or update an ADR for any non-obvious design decision.
+- Every user-visible change adds a line to `CHANGELOG.md` (the app shows it after updating).
+  A release bumps `[workspace.package] version`; the newest changelog entry must match it.
 - Secrets (cookies, headers, URL passwords, torrent bytes) never cross into the webview;
   the UI gets its own types (ADR-018). A new desktop command is added in three places:
   the command, `build.rs` and `capabilities/main.json`.

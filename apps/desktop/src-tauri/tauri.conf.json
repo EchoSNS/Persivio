@@ -1,7 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Persivio",
-  "version": "0.1.0",
   "identifier": "io.github.echosns.persivio",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -55,7 +54,9 @@
     "targets": "all",
     "fileAssociations": [
       {
-        "ext": ["torrent"],
+        "ext": [
+          "torrent"
+        ],
         "name": "BitTorrent file",
         "description": "BitTorrent metadata file",
         "mimeType": "application/x-bittorrent",
@@ -69,5 +70,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGNTM0NzE0RTkzMjM3MDAKUldRQU56THBGRWRUSDA2S1ZMVWdUMXVHS1Y2Wml5eDRyQUdXV1Jzck05RWg0TVpHcWE1OTM1LysK",
+      "endpoints": [
+        "https://github.com/EchoSNS/Persivio/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

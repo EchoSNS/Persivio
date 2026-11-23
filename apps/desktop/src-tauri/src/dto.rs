@@ -589,6 +589,14 @@ pub struct DesktopSettingsView {
     pub prevent_sleep: bool,
     /// Open `magnet:` links with Persivio.
     pub handle_magnet_links: bool,
+    /// Accept downloads from the browser extension.
+    pub browser_bridge: bool,
+    /// Bridge port on 127.0.0.1.
+    pub bridge_port: u16,
+    /// Pairing token to paste into the extension (empty until the bridge is enabled).
+    pub bridge_token: String,
+    /// Check for updates at startup.
+    pub check_for_updates: bool,
 }
 
 impl From<&pv_core::DesktopSettings> for DesktopSettingsView {
@@ -601,6 +609,10 @@ impl From<&pv_core::DesktopSettings> for DesktopSettingsView {
             autostart: d.autostart,
             prevent_sleep: d.prevent_sleep,
             handle_magnet_links: d.handle_magnet_links,
+            browser_bridge: d.browser_bridge,
+            bridge_port: d.bridge_port,
+            bridge_token: d.bridge_token.clone(),
+            check_for_updates: d.check_for_updates,
         }
     }
 }
@@ -615,6 +627,10 @@ impl From<DesktopSettingsView> for pv_core::DesktopSettings {
             autostart: d.autostart,
             prevent_sleep: d.prevent_sleep,
             handle_magnet_links: d.handle_magnet_links,
+            browser_bridge: d.browser_bridge,
+            bridge_port: d.bridge_port,
+            bridge_token: d.bridge_token,
+            check_for_updates: d.check_for_updates,
         }
     }
 }

@@ -18,6 +18,8 @@ use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
 use crate::api::EngineApi;
+use crate::bridge::BridgeStatus;
+use crate::changelog::ReleaseNotesView;
 use crate::desktop::Desktop;
 use crate::dto::{
     AddRequest, MoveDirectionView, ProgressView, SettingsView, TaskDetailView, TaskView,
@@ -27,6 +29,7 @@ use crate::error::CommandError;
 use crate::external::ExternalAddView;
 use crate::forward::{PROGRESS_INTERVAL, forward_progress};
 use crate::ops;
+use crate::updates::{UpdateProgress, UpdateView, Updates};
 
 /// Shared state of the running app.
 pub struct AppState {
@@ -174,6 +177,12 @@ pub async fn set_settings(
     desktop: State<'_, Desktop>,
     settings: SettingsView,
 ) -> Result<Vec<String>, CommandError> {
+    let mut settings = settings;
+    // Turning the bridge on for the first time creates its pairing token.
+    if settings.desktop.browser_bridge && settings.desktop.bridge_token.is_empty() {
+        settings.desktop.bridge_token = crate::bridge::new_token()
+            .map_err(|e| CommandError::invalid(format!("cannot create a token: {e}")))?;
+    }
     let wanted: pv_core::DesktopSettings = settings.desktop.clone().into();
     ops::set_settings(state.engine()?, settings).await?;
     desktop.settings.send_replace(wanted.clone());
@@ -251,4 +260,86 @@ pub fn subscribe_progress(
         move |batch| on_progress.send(batch).is_ok(),
     ));
     Ok(())
+}
+
+/// Whether the browser bridge listens (and why not).
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+pub fn bridge_status(desktop: State<'_, Desktop>) -> BridgeStatus {
+    desktop.bridge_status()
+}
+
+/// A fresh pairing token for the browser extension (saved with the settings).
+#[tauri::command]
+#[specta::specta]
+pub fn new_bridge_token() -> Result<String, CommandError> {
+    crate::bridge::new_token()
+        .map_err(|e| CommandError::invalid(format!("cannot create a token: {e}")))
+}
+
+/// Release notes of every version, newest first (for "What's new").
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+pub fn release_notes() -> Vec<ReleaseNotesView> {
+    crate::changelog::all()
+}
+
+/// The running app's version.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+pub fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// Checks for a newer version.
+#[tauri::command]
+#[specta::specta]
+pub async fn check_for_update(
+    app: AppHandle,
+    updates: State<'_, Updates>,
+) -> Result<Option<UpdateView>, CommandError> {
+    updates.check(&app).await.map_err(CommandError::unavailable)
+}
+
+/// Downloads and verifies the update found by `check_for_update`, stops the engine
+/// gracefully (downloads checkpoint), installs it and restarts the app.
+#[tauri::command]
+#[specta::specta]
+pub async fn install_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    updates: State<'_, Updates>,
+    on_progress: Channel<UpdateProgress>,
+) -> Result<(), CommandError> {
+    let update = updates
+        .take()
+        .ok_or_else(|| CommandError::invalid("no update to install: check again"))?;
+    let mut downloaded = 0u64;
+    let mut last_percent = None;
+    let bytes = update
+        .download(
+            |chunk, total| {
+                downloaded += chunk as u64;
+                let percent = total.map(|t| downloaded * 100 / t.max(1));
+                if percent != last_percent || total.is_none() {
+                    last_percent = percent;
+                    let _ = on_progress.send(UpdateProgress::Downloading { downloaded, total });
+                }
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| CommandError::unavailable(format!("update download failed: {e}")))?;
+    // Only after a verified download: running downloads stop and checkpoint.
+    let _ = on_progress.send(UpdateProgress::Installing);
+    if let Some(engine) = state.running_engine() {
+        engine.shutdown().await;
+    }
+    update
+        .install(bytes)
+        .map_err(|e| CommandError::unavailable(format!("update install failed: {e}")))?;
+    app.restart()
 }

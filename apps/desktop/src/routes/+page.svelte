@@ -6,8 +6,13 @@
 		errorMessage,
 		events,
 		type ExternalAddView,
-		type SettingsView
+		type ReleaseNotesView,
+		type SettingsView,
+		type UpdateView
 	} from '#lib/api/index.ts';
+	import ReleaseNotes from '#lib/components/ReleaseNotes.svelte';
+	import UpdateDialog from '#lib/components/UpdateDialog.svelte';
+	import { loadLastSeen, notesToShow, saveLastSeen } from '#lib/utils/versions.ts';
 	import AddDialog, { type TorrentDraft } from '#lib/components/AddDialog.svelte';
 	import DetailDrawer from '#lib/components/DetailDrawer.svelte';
 	import Modal from '#lib/components/Modal.svelte';
@@ -38,6 +43,19 @@
 		torrent: null
 	});
 	let removing = $state<{ ids: string[]; deleteFiles: boolean } | null>(null);
+	let whatsNew = $state<{ releases: ReleaseNotesView[]; version: string } | null>(null);
+	let update = $state<UpdateView | null>(null);
+
+	/** After an update (or on first start): the notes not seen yet. `all`: every release. */
+	async function showWhatsNew(all: boolean) {
+		try {
+			const [version, releases] = await Promise.all([commands.appVersion(), commands.releaseNotes()]);
+			const shown = all ? releases : notesToShow(releases, version, loadLastSeen());
+			if (shown.length > 0) whatsNew = { releases: shown, version };
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
 	let dragging = $state(false);
 	let list: TaskList | undefined = $state();
 	let searchInput: HTMLInputElement | undefined = $state();
@@ -66,12 +84,20 @@
 		void store.connect();
 		const unlisteners = [
 			events.externalRequestsEvent.listen(() => void takeExternal()),
+			events.updateAvailableEvent.listen((e) => {
+				const found = e.payload;
+				toasts.offer(`Persivio ${found.version} is available`, {
+					label: 'View',
+					run: () => (update = found)
+				});
+			}),
 			events.clipboardLinksEvent.listen((e) => {
 				const links = e.payload.links;
 				const what = links.length === 1 ? (links[0] ?? '') : `${links.length} links`;
 				toasts.offer(`Copied: ${what}`, { label: 'Add', run: () => openAdd(links) });
 			})
 		];
+		void showWhatsNew(false);
 		// Requests that started the app (a magnet click, an opened .torrent).
 		void takeExternal();
 		commands.getSettings().then(
@@ -271,7 +297,11 @@
 
 	<main class="flex min-w-0 flex-1 flex-col">
 		{#if settingsOpen}
-			<SettingsPage onsaved={(s: SettingsView) => (categories = s.categories)} />
+			<SettingsPage
+				onsaved={(s: SettingsView) => (categories = s.categories)}
+				onupdate={(u) => (update = u)}
+				onshownotes={() => void showWhatsNew(true)}
+			/>
 		{:else}
 			<header class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
 				<button class="btn-primary" onclick={() => openAdd()} title="New download (Ctrl+N)">
@@ -398,5 +428,18 @@
 		</button>
 	{/snippet}
 </Modal>
+
+<Modal
+	open={whatsNew !== null}
+	title="What's new in Persivio"
+	onclose={() => {
+		if (whatsNew) saveLastSeen(whatsNew.version);
+		whatsNew = null;
+	}}
+>
+	{#if whatsNew}<ReleaseNotes releases={whatsNew.releases} />{/if}
+</Modal>
+
+<UpdateDialog {update} onclose={() => (update = null)} />
 
 <Toasts />

@@ -25,6 +25,12 @@
     "allow-reveal-task",
     "allow-get-task-detail",
     "allow-inspect-torrent",
-    "allow-take-external-requests"
+    "allow-take-external-requests",
+    "allow-bridge-status",
+    "allow-new-bridge-token",
+    "allow-release-notes",
+    "allow-app-version",
+    "allow-check-for-update",
+    "allow-install-update"
   ]
 }

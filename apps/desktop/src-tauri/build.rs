@@ -21,6 +21,12 @@ const COMMANDS: &[&str] = &[
     "get_task_detail",
     "inspect_torrent",
     "take_external_requests",
+    "bridge_status",
+    "new_bridge_token",
+    "release_notes",
+    "app_version",
+    "check_for_update",
+    "install_update",
 ];
 
 fn main() {

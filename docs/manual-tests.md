@@ -104,6 +104,34 @@ cargo run --release -p persivio-cli -- add @urls --dir "$env:TEMP\persivio-manua
 cargo run --release -p persivio-cli -- pause all
 ```
 
+## 9. Browser extension (Brave)
+
+Setup: `extension/README.md` (Load unpacked, paste the token).
+
+| # | Steps | Expected |
+|---|---|---|
+| 9.1 | Options → **Test connection** with Persivio running and browser integration on. | "Connected to Persivio x.y.z." |
+| 9.2 | Change one character of the token, save, test again. | "Wrong pairing token…" |
+| 9.3 | Turn browser integration off in Persivio, test again. | "Persivio is not reachable…" |
+| 9.4 | Download a public ISO or zip from a site. | Brave's download disappears; Persivio shows the task. |
+| 9.5 | **Log in** to a site that serves a private file (e.g. an attachment in your webmail or cloud storage), download it. | The file downloads in Persivio and opens correctly (not a login page). |
+| 9.6 | Quit Persivio, download a zip in Brave. | Brave downloads it itself; a notification explains why. |
+| 9.7 | Right-click a link → **Download with Persivio**. | Added in Persivio. |
+| 9.8 | Download a small image (< 1 MB, not in the list). | Stays in Brave. |
+| 9.9 | Open http://127.0.0.1:47321/v1/ping in a Brave tab. | "only the Persivio browser extension may call this" (web pages are refused). |
+
+## 10. Updates
+
+Setup: `docs/updates.md`.
+
+| # | Steps | Expected |
+|---|---|---|
+| 10.1 | Install version N from `dist-updates/`. | Installs; on first start, What's new shows version N. |
+| 10.2 | Bump to N+1, add a changelog entry, run `release-local.ps1`, run `serve-updates.mjs`, Settings → Updates → **Check now**. | "Update available" with the notes. |
+| 10.3 | **Install and restart** while a download runs. | Progress, restart; the download resumes; What's new shows only N+1. |
+| 10.4 | Stop the server, Check now. | A clear "could not check" message; nothing breaks. |
+| 10.5 | Edit a byte of the `.exe` in `dist-updates/`, check and install. | Install refused (signature); the app keeps running. |
+
 ## Results
 
 | Date | OS / version | App version | Sections | Result | Notes |

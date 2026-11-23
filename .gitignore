@@ -47,3 +47,6 @@ Thumbs.db
 
 # Desktop frontend build output (embedded by tauri at compile time)
 apps/desktop/build/
+
+# Local update channel (scripts/release-local.ps1)
+/dist-updates/

@@ -75,6 +75,9 @@ jobs:
           npm run check
           npm test
           npm run build
+      - name: Browser extension tests
+        working-directory: extension
+        run: npm test
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests (nextest)

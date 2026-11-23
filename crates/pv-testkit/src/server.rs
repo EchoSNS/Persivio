@@ -151,6 +151,7 @@ impl TestServer {
 
         let app = Router::new()
             .route("/file/{name}", get(file))
+            .route("/auth/{name}", get(auth))
             .route("/norange/{name}", get(norange))
             .route("/throttle/{name}", get(throttle))
             .route("/flaky/{name}", get(flaky))
@@ -364,6 +365,23 @@ async fn file(State(s): Shared, Path(name): Path<String>, headers: HeaderMap) ->
             ..Opts::default()
         },
     )
+}
+
+/// Cookie that `/auth/{name}` requires (a logged-in browser session).
+pub const AUTH_COOKIE: &str = "session=persivio-test";
+
+/// Like `/file`, but only with the [`AUTH_COOKIE`] (403 otherwise): a download behind a login.
+async fn auth(State(s): Shared, Path(name): Path<String>, headers: HeaderMap) -> Response {
+    let logged_in = headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .any(|c| c.trim() == AUTH_COOKIE);
+    if !logged_in {
+        return (StatusCode::FORBIDDEN, "login required").into_response();
+    }
+    file(State(s), Path(name), headers).await
 }
 
 async fn norange(State(s): Shared, Path(name): Path<String>, headers: HeaderMap) -> Response {

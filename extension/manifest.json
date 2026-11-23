@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Persivio",
+  "description": "Send downloads from the browser to the Persivio download manager.",
+  "version": "0.2.0",
+  "icons": { "32": "icons/icon-32.png", "64": "icons/icon-64.png", "128": "icons/icon-128.png" },
+  "action": { "default_title": "Persivio", "default_icon": { "32": "icons/icon-32.png" } },
+  "background": { "service_worker": "src/background.js", "scripts": ["src/background.js"], "type": "module" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "permissions": ["downloads", "cookies", "contextMenus", "storage", "notifications"],
+  "host_permissions": ["<all_urls>"],
+  "browser_specific_settings": { "gecko": { "id": "persivio@echosns.github.io", "strict_min_version": "128.0" } }
+}

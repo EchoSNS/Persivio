@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "targets": [
+      "nsis"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "http://127.0.0.1:8787/latest.json"
+      ],
+      "dangerousInsecureTransportProtocol": true
+    }
+  }
+}

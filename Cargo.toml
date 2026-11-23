@@ -14,7 +14,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.100"
 license = "MIT OR Apache-2.0"
@@ -48,6 +48,7 @@ tracing = "0.1.44"
 
 # Data
 base64 = "0.23.1"
+getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 url = { version = "2.5.9", features = ["serde"] }
@@ -82,6 +83,7 @@ tauri = { version = "2.12.7", features = ["tray-icon"] }
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-clipboard-manager = "2.5.0"
 tauri-plugin-deep-link = "2.6.3"
+tauri-plugin-updater = "2.14.1"
 tauri-build = "2.7.6"
 tauri-plugin-dialog = "2.8.4"
 tauri-plugin-log = "2.10.2"
@@ -98,6 +100,7 @@ keepawake = { version = "0.6.1", default-features = false }
 # Testing
 criterion = { version = "0.8.2", default-features = false }
 proptest = "1.12.0"
+tower = { version = "0.5.3", features = ["util"] }
 tempfile = "3.27.0"
 
 # CLI

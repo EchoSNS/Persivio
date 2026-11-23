@@ -28,6 +28,8 @@ pub const MINIMIZED_ARG: &str = "--minimized";
 pub struct Desktop {
     /// Current desktop settings; background tasks react to changes.
     pub settings: watch::Sender<DesktopSettings>,
+    /// Browser bridge state, written by its supervisor.
+    pub bridge: std::sync::Arc<Mutex<crate::bridge::BridgeStatus>>,
     pending: Mutex<Vec<ExternalAddView>>,
 }
 
@@ -37,8 +39,17 @@ impl Desktop {
     pub fn new(settings: DesktopSettings) -> Self {
         Self {
             settings: watch::Sender::new(settings),
+            bridge: std::sync::Arc::default(),
             pending: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Current bridge status.
+    pub fn bridge_status(&self) -> crate::bridge::BridgeStatus {
+        self.bridge
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// Takes the queued external requests (the UI calls this when signalled and on load).

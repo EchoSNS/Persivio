@@ -13,6 +13,8 @@
 //!   and sleep prevention ([`desktop`], [`integration`], [`external`], [`clipboard`]).
 
 pub mod api;
+pub mod bridge;
+pub mod changelog;
 pub mod clipboard;
 pub mod commands;
 pub mod desktop;
@@ -23,6 +25,7 @@ pub mod forward;
 pub mod integration;
 pub mod ops;
 pub mod sleep;
+pub mod updates;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,11 +66,18 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::get_task_detail,
             commands::inspect_torrent,
             commands::take_external_requests,
+            commands::bridge_status,
+            commands::new_bridge_token,
+            commands::release_notes,
+            commands::app_version,
+            commands::check_for_update,
+            commands::install_update,
         ])
         .events(collect_events![
             EngineUiEvent,
             dto::ExternalRequestsEvent,
-            dto::ClipboardLinksEvent
+            dto::ClipboardLinksEvent,
+            updates::UpdateAvailableEvent
         ])
         // Sizes/speeds are u64 byte counts, exact as JS numbers up to 8 PiB (ADR-018).
         .dangerously_cast_bigints_to_number()
@@ -145,6 +155,7 @@ pub fn run() -> anyhow::Result<()> {
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(builder.invoke_handler())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
@@ -236,6 +247,31 @@ fn setup(app: &mut tauri::App) {
     }
     if let Err(e) = desktop::build_tray(&handle) {
         tracing::warn!("no tray icon: {e}");
+    }
+    app.manage(updates::Updates::default());
+    if let Ok(engine) = &engine {
+        tauri::async_runtime::spawn(bridge::supervise(
+            settings_rx.clone(),
+            Arc::clone(engine),
+            pv_engine::os_download_dir(),
+            Arc::clone(&app.state::<desktop::Desktop>().bridge),
+        ));
+    }
+    // Release builds check for updates at startup (setting); the UI offers to install.
+    if !cfg!(debug_assertions) && settings.desktop.check_for_updates {
+        let checker = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            let updates = checker.state::<updates::Updates>();
+            match updates.check(&checker).await {
+                Ok(Some(found)) => {
+                    if let Err(e) = updates::UpdateAvailableEvent(found).emit(&checker) {
+                        tracing::warn!("cannot announce the update: {e}");
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => tracing::info!("update check: {e}"),
+            }
+        });
     }
     if let Ok(engine) = &engine {
         tauri::async_runtime::spawn(integration::run(

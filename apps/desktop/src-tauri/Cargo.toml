@@ -22,11 +22,14 @@ tauri-build = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true }
 base64 = { workspace = true }
+getrandom = { workspace = true }
 keepawake = { workspace = true }
 pv-core = { workspace = true }
 pv-engine = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri = { workspace = true }
@@ -38,17 +41,20 @@ tauri-plugin-log = { workspace = true }
 tauri-plugin-notification = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-updater = { workspace = true }
 tauri-specta = { workspace = true }
-tokio = { workspace = true, features = ["sync", "time", "macros"] }
+tokio = { workspace = true, features = ["sync", "time", "macros", "net"] }
 tokio-util = { workspace = true }
 # `log`: without a tracing subscriber, the engine's tracing events reach tauri-plugin-log.
 tracing = { workspace = true, features = ["log"] }
 url = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
+pv-testkit = { workspace = true }
+tower = { workspace = true }
+
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt", "test-util"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true
