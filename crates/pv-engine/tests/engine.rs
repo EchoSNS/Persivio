@@ -344,20 +344,23 @@ async fn global_speed_limit_is_accurate_within_ten_percent() {
 
 #[tokio::test]
 async fn per_task_limit_applies() {
-    let f = Fixture::random("t.bin", 400_000, 7);
+    // Measured mid-transfer like the global limit: timing the whole download (probe,
+    // setup, final fsync) against a 1 s budget failed on slow CI runners.
+    let f = Fixture::random("t.bin", 1_500_000, 7);
     let s = TestServer::start([f.clone()]).await.unwrap();
     let env = Env::new();
     let e = env.engine_with(small_segments()).await;
+    let mut events = e.subscribe();
     let mut spec = env.spec(&s.url("/file/t.bin"), 4);
-    spec.speed_limit_bps = Some(400_000);
-    let started = Instant::now();
+    spec.speed_limit_bps = Some(500_000);
     let id = e.add(spec).await.unwrap();
-    wait_for(&e, id, TaskStateKind::Completed, Duration::from_secs(10)).await;
-    let elapsed = started.elapsed().as_secs_f64();
+    let rate = measured_rate(&mut events, id, 1_500_000).await;
+    let done = wait_for(&e, id, TaskStateKind::Completed, Duration::from_secs(10)).await;
     assert!(
-        (0.85..=1.3).contains(&elapsed),
-        "{elapsed:.2}s for 1 s worth of data"
+        (425_000.0..=575_000.0).contains(&rate),
+        "{rate:.0} B/s is outside the 500 KB/s per-task limit ± 15%"
     );
+    assert_eq!(sha256_file(final_path(&done)).await.unwrap(), f.sha256);
     e.shutdown().await;
 }
 

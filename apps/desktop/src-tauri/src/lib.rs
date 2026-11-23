@@ -185,7 +185,8 @@ pub fn run() -> anyhow::Result<()> {
         // macOS delivers magnet links and opened .torrent files as events, not arguments.
         #[cfg(target_os = "macos")]
         RunEvent::Opened { urls } => {
-            let view = external::resolve(external::classify_args(urls.iter().map(|u| u.as_str())));
+            let view =
+                external::resolve(external::classify_args(urls.iter().map(url::Url::as_str)));
             desktop::handle_external(app, view);
         }
         #[cfg(target_os = "macos")]
