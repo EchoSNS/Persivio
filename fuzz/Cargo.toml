@@ -14,6 +14,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4.13"
 pv-http = { path = "../crates/pv-http" }
+pv-torrent = { path = "../crates/pv-torrent" }
 
 # Separate workspace: the main workspace builds on stable.
 [workspace]
@@ -36,6 +37,20 @@ bench = false
 [[bin]]
 name = "sanitize_filename"
 path = "fuzz_targets/sanitize_filename.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "magnet"
+path = "fuzz_targets/magnet.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "torrent_file"
+path = "fuzz_targets/torrent_file.rs"
 test = false
 doc = false
 bench = false

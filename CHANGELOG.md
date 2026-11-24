@@ -22,7 +22,16 @@ Format: one `## [version] - date` heading per release, then `### Added`, `### Ch
 - The global speed limit now also applies to torrents that are already running.
 - Downloads are listed newest first; the Save button in Settings stays visible.
 
+### Security
+- Cookies, headers and logins of a download are erased from disk when it completes or is
+  cancelled, also those stored by earlier versions.
+- On Linux and macOS, the data folder is readable by you only.
+
 ### Fixed
+- A full disk is reported clearly, and the download can be retried after making room.
+- Automatic retries now also cover connecting, and servers without resume support.
+- A server that never answers no longer blocks a download: it can be paused, and times out.
+- A download whose state could not be saved no longer looks as if it were still running.
 - A resumed torrent looked as if it downloaded very fast and then started over. The fast
   part was the check of existing data.
 - Torrents showed 0% after a restart until they ran again.

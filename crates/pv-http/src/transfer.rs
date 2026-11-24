@@ -19,9 +19,10 @@ use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use crate::client::{DownloadRequest, HttpClient, network_error};
+use crate::client::{DownloadRequest, HttpClient, guarded, network_error};
 use crate::content_range::{ContentRange, parse_content_range};
 use crate::probe::{ensure_identity, resume_info_from};
+use crate::segmented::ensure_space;
 
 /// Where checkpoints go. The task's single segment has index 0.
 pub struct Checkpointing<'a> {
@@ -128,7 +129,10 @@ pub async fn run_single(
         attempts += 1;
         let response = match initial.take() {
             Some(r) if offset == 0 => r,
-            _ => send(t, offset).await?,
+            _ => match guarded(t.cancel, t.idle_timeout, send(t, offset)).await? {
+                Some(r) => r,
+                None => return Ok(TransferOutcome::Cancelled { offset }),
+            },
         };
         match classify(response, offset, t.expected_total)? {
             Next::Stream(response, total) => {
@@ -167,18 +171,7 @@ pub async fn run_single(
     };
 
     let validators = resume_info_from(&response);
-    if offset == 0
-        && let (Some(cp), Some(total @ 1..)) = (&t.checkpoint, total)
-    {
-        // Fresh plan (or new plan after a restart): one segment covering the file.
-        let plan = [Segment {
-            index: 0,
-            start: 0,
-            end: total - 1,
-            downloaded: 0,
-        }];
-        cp.sink.save_segments(cp.task, &plan).await?;
-    }
+    prepare(t, total, offset).await?;
     t.progress.set_total(total);
     t.progress.set_downloaded(offset);
 
@@ -209,6 +202,34 @@ pub async fn run_single(
             validators,
         }),
     }
+}
+
+/// Before streaming: the rest must fit on the disk, and a fresh download gets its
+/// checkpoint row.
+async fn prepare(t: &Transfer<'_>, total: Option<u64>, offset: u64) -> Result<(), ProtocolError> {
+    let Some(total) = total else {
+        return Ok(());
+    };
+    let dir = t.part_path.parent().unwrap_or_else(|| Path::new("."));
+    let dir = dir.to_path_buf();
+    let remaining = total.saturating_sub(offset);
+    tokio::task::spawn_blocking(move || ensure_space(&dir, remaining))
+        .await
+        .map_err(|e| ProtocolError::Io(std::io::Error::other(e)))??;
+    if offset == 0
+        && let Some(cp) = &t.checkpoint
+        && total > 0
+    {
+        // Fresh plan (or new plan after a restart): one segment covering the file.
+        let plan = [Segment {
+            index: 0,
+            start: 0,
+            end: total - 1,
+            downloaded: 0,
+        }];
+        cp.sink.save_segments(cp.task, &plan).await?;
+    }
+    Ok(())
 }
 
 async fn send(t: &Transfer<'_>, offset: u64) -> Result<Response, ProtocolError> {

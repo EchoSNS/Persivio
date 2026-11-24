@@ -1,5 +1,6 @@
 //! The HTTP client used for probing and downloading.
 
+use std::future::Future;
 use std::time::Duration;
 
 use pv_core::{ProtocolError, Settings, Source};
@@ -7,6 +8,7 @@ use reqwest::header::{
     ACCEPT_ENCODING, COOKIE, HeaderMap, HeaderName, HeaderValue, LOCATION, REFERER,
 };
 use reqwest::{Client, Response, StatusCode, redirect};
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 /// Maximum redirects followed per request.
@@ -267,6 +269,26 @@ fn same_origin(a: &Url, b: &Url) -> bool {
 
 /// Converts a reqwest error into a protocol error **without the URL** (signed URLs carry
 /// tokens in their query strings and must not end up in logs or the UI).
+/// Waits for `response`, at most `timeout`, and only until `cancel` fires (`Ok(None)`).
+/// A server may accept a connection and then never answer.
+pub(crate) async fn guarded<T>(
+    cancel: &CancellationToken,
+    timeout: Duration,
+    response: impl Future<Output = Result<T, ProtocolError>>,
+) -> Result<Option<T>, ProtocolError> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Ok(None),
+        answered = tokio::time::timeout(timeout, response) => match answered {
+            Err(_) => Err(ProtocolError::Network(format!(
+                "timed out: no response for {}s",
+                timeout.as_secs_f32()
+            ))),
+            Ok(result) => result.map(Some),
+        },
+    }
+}
+
 pub(crate) fn network_error(err: reqwest::Error) -> ProtocolError {
     let timeout = err.is_timeout();
     let err = err.without_url();

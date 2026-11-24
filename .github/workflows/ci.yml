@@ -85,6 +85,13 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests (nextest)
         run: cargo nextest run --workspace --locked
+      # Phase 11: a full disk must fail cleanly. Needs a small file system.
+      - name: Disk-full tests (24 MiB tmpfs)
+        if: runner.os == 'Linux'
+        run: |
+          sudo mkdir -p /mnt/small
+          sudo mount -t tmpfs -o size=24m,mode=1777 tmpfs /mnt/small
+          PERSIVIO_SMALL_DISK=/mnt/small cargo nextest run -p pv-engine --test hardening --locked --run-ignored only
       # nextest does not run doctests; run them separately.
       - name: Doctests
         run: cargo test --workspace --doc --locked
@@ -95,19 +102,13 @@ jobs:
 
   fuzz:
     # libFuzzer needs nightly and sanitizer support, which is reliable on Linux.
-    # Phase 3 criterion: content_range runs 5 minutes without a crash.
+    # Phase 11 criterion: every target runs 10 minutes without a crash.
     name: fuzz (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: content_range
-            seconds: 300
-          - target: content_disposition
-            seconds: 120
-          - target: sanitize_filename
-            seconds: 120
+        target: [content_range, content_disposition, sanitize_filename, magnet, torrent_file]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
@@ -117,9 +118,9 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
-      - name: Fuzz ${{ matrix.target }} for ${{ matrix.seconds }}s
+      - name: Fuzz ${{ matrix.target }} for 600s
         # The prebuilt cargo-fuzz is a musl binary and would default to a musl target.
-        run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=${{ matrix.seconds }}
+        run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=600
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@v7

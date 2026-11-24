@@ -96,6 +96,11 @@ Record results in the table at the end (date, OS, version, pass/fail, notes).
 | 8.2 | Settings → Appearance → Light, Dark, System. | All screens readable in each; System follows the OS setting live. |
 | 8.3 | Use only the keyboard: Tab, arrows, Space, Enter, Delete, Ctrl+A, Ctrl+N, Esc. | Every core action is possible; focus is always visible. |
 
+| 8.4 | Right-click a download; use the arrow keys, Enter and Escape in the menu. | Actions match the task's state; Escape returns to the list. |
+| 8.5 | Settings → Appearance → Glass effects off and on; Windows Settings → Personalization → Colors → Transparency effects off. | Solid surfaces at once; both readable. |
+| 8.6 | Pause a large torrent and resume it; quit and start the app and resume again. | "Checking files" for a moment only, then it continues where it was. No fast bar that starts over. |
+| 8.7 | With no torrent running, wait a minute and look at Malwarebytes or Resource Monitor. | No torrent connections from Persivio. |
+
 To create 500 paused tasks (PowerShell, with `PERSIVIO_DATA_DIR` set as above):
 
 ```powershell

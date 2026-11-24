@@ -142,7 +142,9 @@ pub fn run() -> anyhow::Result<()> {
                 .filter(|meta| {
                     let ours = meta.target().starts_with("persivio")
                         || meta.target().starts_with("pv_");
-                    ours || meta.level() <= tauri_plugin_log::log::Level::Warn
+                    // An unreachable tracker warns several times a minute.
+                    let noisy = meta.target().starts_with("librqbit_tracker_comms");
+                    ours || (meta.level() <= tauri_plugin_log::log::Level::Warn && !noisy)
                 })
                 .build(),
         )

@@ -12,9 +12,9 @@ use pv_core::{
     FileEntry, Outcome, Protocol, ProtocolError, ResolvedMetadata, RunContext, RunPhase, Source,
 };
 
-use crate::client::{ClientConfig, DownloadRequest, HttpClient};
+use crate::client::{ClientConfig, DownloadRequest, HttpClient, guarded};
 use crate::filename::{contained_path, part_name, resolve_filename, unique_name};
-use crate::probe::probe;
+use crate::probe::{Probe, probe};
 use crate::segmented::{Segmented, SegmentedConfig, SegmentedOutcome, run_segmented};
 use crate::transfer::{Checkpointing, Transfer, TransferOutcome, finalize, run_single};
 use crate::verify::verify_file;
@@ -130,7 +130,9 @@ impl Run<'_> {
         let ctx = self.ctx;
         let dest = &ctx.task.spec.dest_dir;
         ctx.events.phase(RunPhase::Probing);
-        let probe = probe(self.client, self.request).await?;
+        let Some(probe) = self.probe().await? else {
+            return Ok(Some(Outcome::Stopped));
+        };
         let resolved = resolve_filename(
             ctx.task.spec.file_name.as_deref(),
             probe.content_disposition.as_deref(),
@@ -195,9 +197,60 @@ impl Run<'_> {
                 interval: CHECKPOINT_INTERVAL,
             }),
         };
-        match run_single(&transfer, probe.body).await? {
-            TransferOutcome::Cancelled { .. } => Ok(Some(Outcome::Stopped)),
-            TransferOutcome::Completed { .. } => self.finish(&name, &part).await.map(Some),
+        let mut body = probe.body;
+        let mut failures = 0;
+        loop {
+            match run_single(&transfer, body.take()).await {
+                Ok(TransferOutcome::Cancelled { .. }) => return Ok(Some(Outcome::Stopped)),
+                Ok(TransferOutcome::Completed { .. }) => {
+                    return self.finish(&name, &part).await.map(Some);
+                }
+                Err(e) => {
+                    if !self.wait_to_retry(e, &mut failures).await? {
+                        return Ok(Some(Outcome::Stopped));
+                    }
+                    // Nothing to resume from: the next attempt starts at zero.
+                    ctx.progress.rebase(0);
+                }
+            }
+        }
+    }
+
+    /// Probes, retrying temporary failures. `None`: cancelled.
+    async fn probe(&self) -> Result<Option<Probe>, ProtocolError> {
+        let mut failures = 0;
+        loop {
+            let attempt = probe(self.client, self.request);
+            match guarded(&self.ctx.cancel, self.idle_timeout(), attempt).await {
+                Err(e) => {
+                    if !self.wait_to_retry(e, &mut failures).await? {
+                        return Ok(None);
+                    }
+                }
+                done => return done,
+            }
+        }
+    }
+
+    /// Waits before another attempt after `error`; `false` if cancelled meanwhile.
+    ///
+    /// # Errors
+    /// `error` itself, if it is permanent or the retries are used up.
+    async fn wait_to_retry(
+        &self,
+        error: ProtocolError,
+        failures: &mut u32,
+    ) -> Result<bool, ProtocolError> {
+        let policy = self.config().retry;
+        if !error.is_retryable() || *failures >= policy.max_retries {
+            return Err(error);
+        }
+        let delay = policy.delay(*failures, None, 0);
+        *failures += 1;
+        tracing::debug!(failures = *failures, ?delay, %error, "retrying");
+        tokio::select! {
+            () = self.ctx.cancel.cancelled() => Ok(false),
+            () = tokio::time::sleep(delay) => Ok(true),
         }
     }
 

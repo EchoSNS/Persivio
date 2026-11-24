@@ -84,6 +84,9 @@ impl Store {
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
             .foreign_keys(true)
+            // Overwrite deleted content with zeros: removed cookies must not survive in
+            // free pages of the file.
+            .pragma("secure_delete", "ON")
             .busy_timeout(Duration::from_secs(5));
         let pool = SqlitePoolOptions::new()
             .max_connections(4)
@@ -345,6 +348,47 @@ impl Store {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Replaces a task's source (the engine does this to drop secrets, ADR-025).
+    ///
+    /// # Errors
+    /// Database errors; [`StoreError::NotFound`].
+    pub async fn update_source(&self, id: TaskId, source: &Source) -> Result<(), StoreError> {
+        let result = sqlx::query("UPDATE tasks SET source_json = ? WHERE id = ?")
+            .bind(serde_json::to_string(source)?)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Makes every change of a task fail, as a full disk would (feature `testing`).
+    ///
+    /// # Errors
+    /// Database errors.
+    #[cfg(feature = "testing")]
+    pub async fn fail_task_updates(&self, fail: bool) -> Result<(), StoreError> {
+        sqlx::query(if fail {
+            "CREATE TRIGGER test_fail BEFORE UPDATE ON tasks
+             BEGIN SELECT RAISE(FAIL, 'database or disk is full'); END"
+        } else {
+            "DROP TRIGGER test_fail"
+        })
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Runs SQLite's integrity check; `true` if the database is intact.
+    ///
+    /// # Errors
+    /// Database errors.
+    pub async fn is_intact(&self) -> Result<bool, StoreError> {
+        let result: String = sqlx::query_scalar("PRAGMA integrity_check(1)")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(result == "ok")
     }
 
     /// Stores how much of a torrent is on disk and the protocol's record of which parts.

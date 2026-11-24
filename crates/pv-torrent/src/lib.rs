@@ -16,7 +16,7 @@ pub mod testing;
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -216,7 +216,7 @@ impl TorrentProtocol {
         ctx.events.metadata(ResolvedMetadata {
             name: Some(layout.root_name.clone()),
             total_size: Some(total),
-            files,
+            files: files.clone(),
             http: None,
         });
 
@@ -231,6 +231,7 @@ impl TorrentProtocol {
             .iter()
             .map(|(rel, _)| layout.output_folder.join(rel))
             .collect();
+        ensure_space(&dest, &layout, &files).await?;
         let resuming = ctx.resume.torrent.is_some();
         self.prepare_fast_resume(ctx, &info_hash, &paths).await;
         let opts = AddTorrentOptions {
@@ -396,11 +397,7 @@ impl Active<'_> {
                 }
                 TorrentStatsState::Error => {
                     detach(self.session, self.id).await;
-                    return Err(torrent_err(
-                        stats
-                            .error
-                            .unwrap_or_else(|| "unknown torrent error".to_owned()),
-                    ));
+                    return Err(run_error(stats.error));
                 }
                 TorrentStatsState::Live | TorrentStatsState::Paused => {}
             }
@@ -495,6 +492,54 @@ impl Active<'_> {
     }
 }
 
+/// Fails early and clearly if the selected files cannot fit. What exists already counts
+/// as present, so this never refuses a download that would have worked.
+async fn ensure_space(
+    dest: &Path,
+    layout: &paths::Layout,
+    files: &[FileEntry],
+) -> Result<(), ProtocolError> {
+    let wanted: Vec<(PathBuf, u64)> = layout
+        .files
+        .iter()
+        .zip(files)
+        .filter(|(_, entry)| entry.selected)
+        .map(|((rel, size), _)| (layout.output_folder.join(rel), *size))
+        .collect();
+    let dest = dest.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let needed: u64 = wanted
+            .iter()
+            .map(|(path, size)| {
+                let present = std::fs::metadata(path).map_or(0, |m| m.len());
+                size.saturating_sub(present)
+            })
+            .sum();
+        let available = fs4::available_space(&dest)?;
+        if available < needed {
+            return Err(ProtocolError::DiskFull { needed, available });
+        }
+        Ok(())
+    })
+    .await
+    .map_err(torrent_err)?
+}
+
+/// librqbit reports errors as text; a full disk must still be recognizable.
+fn run_error(text: Option<String>) -> ProtocolError {
+    let text = text.unwrap_or_else(|| "unknown torrent error".to_owned());
+    // ENOSPC is 28 on Linux and macOS; ERROR_DISK_FULL is 112 on Windows.
+    let code = if cfg!(windows) { 112 } else { 28 };
+    if text.contains(&format!("(os error {code})")) {
+        ProtocolError::DiskFull {
+            needed: 0,
+            available: 0,
+        }
+    } else {
+        torrent_err(text)
+    }
+}
+
 /// `part` of `whole` in percent, rounded down.
 fn percent(part: u64, whole: u64) -> u8 {
     let p = u128::from(part) * 100 / u128::from(whole.max(1));
@@ -575,6 +620,21 @@ mod tests {
         assert_eq!(m.trackers, ["udp://t.example:80"]);
         assert!(parse_magnet("magnet:?dn=nohash").is_err());
         assert!(parse_magnet("https://example.com").is_err());
+    }
+
+    #[test]
+    fn a_full_disk_is_recognized_in_torrent_errors() {
+        let code = if cfg!(windows) { 112 } else { 28 };
+        let text = format!("error writing: disk says no (os error {code})");
+        assert!(matches!(
+            run_error(Some(text)),
+            ProtocolError::DiskFull { .. }
+        ));
+        assert!(matches!(
+            run_error(Some("boom (os error 5)".into())),
+            ProtocolError::Torrent(_)
+        ));
+        assert!(run_error(None).to_string().contains("unknown"));
     }
 
     #[test]

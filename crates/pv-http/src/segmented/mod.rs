@@ -150,6 +150,15 @@ enum FetchError {
     Cancelled,
 }
 
+/// Fails early and clearly if `needed` more bytes cannot fit in `dir`. Blocking.
+pub(crate) fn ensure_space(dir: &Path, needed: u64) -> Result<(), ProtocolError> {
+    let available = fs4::available_space(dir)?;
+    if available < needed {
+        return Err(ProtocolError::DiskFull { needed, available });
+    }
+    Ok(())
+}
+
 /// Opens (fresh: creates and preallocates) the `.part` file on the blocking pool.
 async fn open_part(
     path: PathBuf,
@@ -160,13 +169,7 @@ async fn open_part(
         if fresh {
             let dir = path.parent().unwrap_or_else(|| Path::new("."));
             std::fs::create_dir_all(dir)?;
-            let available = fs4::available_space(dir)?;
-            if available < total {
-                return Err(ProtocolError::DiskFull {
-                    needed: total,
-                    available,
-                });
-            }
+            ensure_space(dir, total)?;
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)

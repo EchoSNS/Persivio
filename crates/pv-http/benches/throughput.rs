@@ -42,7 +42,7 @@ fn throughput(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(SIZE as u64));
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
-    for connections in [1u8, 4, 8] {
+    for connections in [1u8, 2, 4, 8, 16] {
         let cfg = SegmentedConfig {
             min_segment: 1024 * 1024,
             ..SegmentedConfig::from_settings(&Settings::default(), Some(connections))
@@ -75,5 +75,43 @@ fn throughput(c: &mut Criterion) {
     drop(server);
 }
 
-criterion_group!(benches, throughput);
+/// The disk side alone: 64 KiB messages through the bounded queue, then one sync.
+fn writer(c: &mut Criterion) {
+    use pv_http::segmented::{MAX_MESSAGE, spawn_writer};
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let block = bytes::Bytes::from(vec![7u8; MAX_MESSAGE]);
+    let mut group = c.benchmark_group("writer");
+    group.throughput(Throughput::Bytes(SIZE as u64));
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(5));
+    group.bench_function("write_and_sync", |b| {
+        b.iter(|| {
+            let file = std::fs::File::create(dir.path().join("w.part")).unwrap();
+            file.set_len(SIZE as u64).unwrap();
+            let writer = spawn_writer(
+                file,
+                std::collections::HashMap::new(),
+                512,
+                None,
+                Arc::default(),
+            )
+            .unwrap();
+            rt.block_on(async {
+                for i in 0..(SIZE / MAX_MESSAGE) as u64 {
+                    let offset = i * MAX_MESSAGE as u64;
+                    writer.write(0, offset, block.clone()).await.unwrap();
+                }
+                let written = writer.sync().await.unwrap();
+                assert_eq!(written[&0], SIZE as u64);
+            });
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(benches, throughput, writer);
 criterion_main!(benches);

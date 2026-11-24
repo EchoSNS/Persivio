@@ -42,9 +42,9 @@ pub enum FailReason {
     #[error("download link expired")]
     LinkExpired,
     /// Not enough free space at the destination.
-    #[error("not enough disk space: {needed} bytes needed, {available} available")]
+    #[error("{}", disk_full(*needed, *available))]
     DiskFull {
-        /// Bytes required.
+        /// Bytes required; 0 if unknown (the disk filled up while writing).
         needed: u64,
         /// Bytes available.
         available: u64,
@@ -92,6 +92,15 @@ pub enum FailReason {
         /// Human-readable detail.
         message: String,
     },
+}
+
+/// The text for a full disk, with the numbers if they are known.
+pub(crate) fn disk_full(needed: u64, available: u64) -> String {
+    if needed == 0 {
+        "the disk is full".to_owned()
+    } else {
+        format!("not enough disk space: {needed} bytes needed, {available} available")
+    }
 }
 
 /// The lifecycle state of a task, with data where a state needs it.

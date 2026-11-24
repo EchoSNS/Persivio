@@ -119,6 +119,12 @@ impl Engine {
                 queued.push((task.queue_order, task.snapshot.created_at, id));
             }
         }
+        // Ended downloads need no credentials (also from versions before ADR-025).
+        for task in &stored {
+            if task.snapshot.state.kind().is_terminal() {
+                actor.forget_secrets(task.snapshot.id).await;
+            }
+        }
         queued.sort();
         actor.queue = queued.into_iter().map(|(_, _, id)| id).collect();
 

@@ -160,6 +160,31 @@ impl Source {
         }
     }
 
+    /// Removes everything secret that is only needed while downloading: cookies, custom
+    /// headers, the referer, and a user name or password in the URL. Returns whether
+    /// anything was removed.
+    pub fn strip_secrets(&mut self) -> bool {
+        let Self::Http {
+            url,
+            headers,
+            cookies,
+            referer,
+        } = self
+        else {
+            return false;
+        };
+        let had_login = !url.username().is_empty() || url.password().is_some();
+        if had_login {
+            // Cannot fail: a URL with a login has a host.
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+        }
+        let had_headers = !std::mem::take(headers).is_empty();
+        let had_cookies = cookies.take().is_some();
+        let had_referer = referer.take().is_some();
+        had_login || had_headers || had_cookies || had_referer
+    }
+
     /// Which protocol family handles this source.
     #[must_use]
     pub const fn kind(&self) -> TaskKind {
@@ -271,6 +296,27 @@ mod hex_bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secrets_can_be_stripped() {
+        let mut s = Source::Http {
+            url: Url::parse("https://me:pw@example.com/f?x=1").unwrap(),
+            headers: vec![("X-Custom".into(), "v".into())],
+            cookies: Some("session=1".into()),
+            referer: Some(Url::parse("https://example.com/page?token=t").unwrap()),
+        };
+        assert!(s.strip_secrets());
+        assert_eq!(
+            s,
+            Source::http(Url::parse("https://example.com/f?x=1").unwrap()).unwrap()
+        );
+        assert!(!s.strip_secrets(), "nothing left");
+        assert!(
+            !Source::magnet("magnet:?xt=urn:btih:a")
+                .unwrap()
+                .strip_secrets()
+        );
+    }
 
     fn url(s: &str) -> Url {
         Url::parse(s).unwrap()

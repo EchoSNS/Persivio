@@ -68,7 +68,7 @@ pv-testkit: dev-dependency only, never in shipped binaries
 7. All segments done → optional checksum verify → rename `.part` to the final name → `Completed`.
 
 ### Crash recovery
-On startup, tasks found in `Probing`, `Downloading` or `Verifying` become `Paused` (or auto-resume
+On startup, tasks found in a running state (`Probing`, `Checking`, `Downloading`, …) become `Paused` (or auto-resume
 per settings). Segments are loaded from the DB, and each `.part` file's existence and size are
 validated before resuming; inconsistent tasks are marked `Failed` with a clear reason.
 

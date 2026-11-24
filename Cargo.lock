@@ -3785,6 +3785,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "memory-stats"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c73f5c649995a115e1a0220b35e4df0a1294500477f97a91d0660fb5abeb574a"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "metrics"
 version = "0.24.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4931,8 +4941,10 @@ name = "pv-engine"
 version = "0.3.0"
 dependencies = [
  "async-trait",
+ "criterion",
  "directories",
  "governor",
+ "memory-stats",
  "pv-core",
  "pv-http",
  "pv-store",
@@ -4975,6 +4987,7 @@ version = "0.3.0"
 dependencies = [
  "async-trait",
  "pv-core",
+ "pv-store",
  "serde",
  "serde_json",
  "sqlx",
@@ -5004,6 +5017,7 @@ name = "pv-torrent"
 version = "0.3.0"
 dependencies = [
  "async-trait",
+ "fs4",
  "librqbit",
  "pv-core",
  "pv-testkit",

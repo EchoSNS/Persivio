@@ -451,7 +451,7 @@ async fn flaky(
         &entry,
         &headers,
         Opts {
-            ranges: true,
+            ranges: param::<u8>(&q, "ranges") != Some(0),
             faults,
             ..Opts::default()
         },

@@ -55,6 +55,13 @@ impl DataDir {
             source,
         };
         std::fs::create_dir_all(&path).map_err(io)?;
+        // It holds cookies of unfinished downloads and the browser pairing token. (On
+        // Windows, the user profile is private already.)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).map_err(io)?;
+        }
         let file = File::create(path.join("persivio.lock")).map_err(io)?;
         match file.try_lock() {
             Ok(()) => Ok(Self { path, _lock: file }),
@@ -94,8 +101,28 @@ mod tests {
         let dir = tmp.path().join("data");
         let first = DataDir::open(&dir).unwrap();
         assert_eq!(first.db_path(), dir.join("persivio.db"));
+        assert_eq!(first.path(), dir);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "private to the user");
+        }
         assert!(matches!(DataDir::open(&dir), Err(DataDirError::Locked(_))));
         drop(first);
         DataDir::open(&dir).unwrap();
+        // A file where the directory should be is an error, not a panic.
+        let file = tmp.path().join("file");
+        std::fs::write(&file, b"x").unwrap();
+        let err = DataDir::open(&file).unwrap_err();
+        assert!(matches!(err, DataDirError::Io { .. }), "{err}");
+    }
+
+    #[test]
+    fn the_default_locations_are_named_after_the_app() {
+        if let Ok(path) = DataDir::default_path() {
+            let text = path.to_string_lossy().to_lowercase();
+            assert!(text.contains("persivio"), "{text}");
+        }
     }
 }

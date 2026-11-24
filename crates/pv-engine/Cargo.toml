@@ -22,6 +22,9 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
+memory-stats = { workspace = true }
+pv-store = { workspace = true, features = ["testing"] }
 pv-torrent = { workspace = true, features = ["testing"] }
 pv-testkit = { workspace = true }
 tempfile = { workspace = true }
@@ -30,3 +33,7 @@ url = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "overhead"
+harness = false

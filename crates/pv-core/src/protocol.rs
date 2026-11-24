@@ -232,16 +232,16 @@ pub enum ProtocolError {
     #[error("download link expired")]
     LinkExpired,
     /// Not enough space for the file.
-    #[error("not enough disk space: {needed} bytes needed, {available} available")]
+    #[error("{}", crate::state::disk_full(*needed, *available))]
     DiskFull {
-        /// Bytes required.
+        /// Bytes required; 0 if unknown (the disk filled up while writing).
         needed: u64,
         /// Bytes available.
         available: u64,
     },
-    /// Local I/O failure.
+    /// Local I/O failure. (A full disk becomes [`DiskFull`](Self::DiskFull).)
     #[error("file system error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(std::io::Error),
     /// Verification failed.
     #[error("checksum mismatch: expected {expected}, got {actual}")]
     ChecksumMismatch {
@@ -261,7 +261,31 @@ pub enum ProtocolError {
     Checkpoint(#[from] CheckpointError),
 }
 
+impl From<std::io::Error> for ProtocolError {
+    fn from(e: std::io::Error) -> Self {
+        use std::io::ErrorKind;
+        match e.kind() {
+            ErrorKind::StorageFull | ErrorKind::QuotaExceeded => Self::DiskFull {
+                needed: 0,
+                available: 0,
+            },
+            _ => Self::Io(e),
+        }
+    }
+}
+
 impl ProtocolError {
+    /// Whether retrying makes sense once the *user* fixed something: freed disk space,
+    /// plugged a drive back in, reconnected a network.
+    #[must_use]
+    pub const fn is_user_retryable(&self) -> bool {
+        self.is_retryable()
+            || matches!(
+                self,
+                Self::DiskFull { .. } | Self::Io(_) | Self::Torrent(_) | Self::Checkpoint(_)
+            )
+    }
+
     /// Whether an automatic retry could plausibly succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
@@ -310,7 +334,7 @@ impl ProtocolError {
     pub fn to_failed_state(&self) -> TaskState {
         TaskState::Failed {
             reason: self.fail_reason(),
-            retryable: self.is_retryable(),
+            retryable: self.is_user_retryable(),
         }
     }
 }
@@ -360,6 +384,10 @@ mod tests {
             ),
             (std::io::Error::other("denied").into(), false),
             (
+                std::io::Error::from(std::io::ErrorKind::StorageFull).into(),
+                false,
+            ),
+            (
                 ProtocolError::ChecksumMismatch {
                     expected: "a".into(),
                     actual: "b".into(),
@@ -379,13 +407,34 @@ mod tests {
             else {
                 panic!("not a failed state");
             };
-            assert_eq!(r, retryable);
+            // The user may retry more than Persivio does by itself.
+            let user = retryable
+                || matches!(
+                    err,
+                    ProtocolError::DiskFull { .. }
+                        | ProtocolError::Io(_)
+                        | ProtocolError::Torrent(_)
+                        | ProtocolError::Checkpoint(_)
+                );
+            assert_eq!(r, user, "{err}");
             // The persisted reason reads the same as the error for the user.
             assert_eq!(
                 reason.to_string(),
                 err.to_string()
                     .replace("checkpoint failed", "internal error: checkpoint failed")
             );
+        }
+    }
+
+    #[test]
+    fn a_full_disk_is_recognized_and_explained() {
+        for kind in [
+            std::io::ErrorKind::StorageFull,
+            std::io::ErrorKind::QuotaExceeded,
+        ] {
+            let err = ProtocolError::from(std::io::Error::from(kind));
+            assert_eq!(err.to_string(), "the disk is full");
+            assert_eq!(err.fail_reason().to_string(), "the disk is full");
         }
     }
 

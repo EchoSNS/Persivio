@@ -267,6 +267,15 @@ impl Actor {
         transition(&task.state, &state)?;
         let now = UnixMillis::now();
         self.store.update_state(id, &state, now).await?;
+        let ended = state.kind().is_terminal();
+        self.apply_state(id, state, now);
+        if ended {
+            self.forget_secrets(id).await;
+        }
+        Ok(())
+    }
+
+    fn apply_state(&mut self, id: TaskId, state: TaskState, now: UnixMillis) {
         if let Some(task) = self.tasks.get_mut(&id) {
             if state == TaskState::Completed {
                 task.completed_at = Some(now);
@@ -275,7 +284,38 @@ impl Actor {
             task.updated_at = now;
         }
         self.emit(EngineEvent::StateChanged { id, state });
-        Ok(())
+    }
+
+    /// Cookies and headers are only needed while a download can still run (ADR-025).
+    pub async fn forget_secrets(&mut self, id: TaskId) {
+        let Some(task) = self.tasks.get_mut(&id) else {
+            return;
+        };
+        if !task.spec.source.strip_secrets() {
+            return;
+        }
+        if let Err(e) = self.store.update_source(id, &task.spec.source).await {
+            tracing::warn!(%id, %e, "could not remove stored credentials");
+        }
+    }
+
+    /// The run is over but its end could not be saved (a full disk, a locked database).
+    /// The task must not look as if it still ran: it is shown as failed until it is
+    /// resumed. After a restart, recovery finds it running and pauses it.
+    fn end_unsaved(&mut self, id: TaskId, error: &EngineError) {
+        let Some(task) = self.tasks.get(&id) else {
+            return;
+        };
+        if !task.state.kind().is_running() {
+            return;
+        }
+        let state = TaskState::Failed {
+            reason: FailReason::Internal {
+                message: format!("the download stopped and its state could not be saved: {error}"),
+            },
+            retryable: true,
+        };
+        self.apply_state(id, state, UnixMillis::now());
     }
 
     async fn add(&mut self, spec: pv_core::TaskSpec) -> Result<TaskId, EngineError> {
@@ -654,6 +694,7 @@ impl Actor {
         };
         if let Err(e) = outcome {
             tracing::warn!(%id, %e, "could not record task end");
+            self.end_unsaved(id, &e);
         }
     }
 
