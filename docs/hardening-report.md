@@ -59,7 +59,8 @@ machine. The limit per round is 5 minutes.
 
 Targets: `content_range`, `content_disposition`, `sanitize_filename`, `magnet`,
 `torrent_file`; each runs 10 minutes in CI on Linux (libFuzzer needs nightly Rust).
-`torrent_file` found an integer overflow in librqbit's parser within a minute (ADR-026);
+`torrent_file` found an integer overflow in librqbit's parser within a minute, and a
+division by zero after nine (ADR-026, both fixed in 0.4.0);
 the other four ran clean.
 
 ## Benchmarks

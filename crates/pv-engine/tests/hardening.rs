@@ -509,3 +509,51 @@ fn the_real_windows_disk_full_error_is_recognized() {
         "not recognized"
     );
 }
+
+/// A protocol with a bug.
+struct Crashing;
+
+#[async_trait::async_trait]
+impl pv_core::Protocol for Crashing {
+    fn handles(&self, _: &Source) -> bool {
+        true
+    }
+    async fn run(
+        &self,
+        ctx: pv_core::RunContext,
+    ) -> Result<pv_core::Outcome, pv_core::ProtocolError> {
+        ctx.events.phase(pv_core::RunPhase::Downloading);
+        tokio::task::yield_now().await;
+        panic!("a bug in a library");
+    }
+}
+
+/// A crash in one download must end that download, not leave it "running" forever with
+/// its slot taken.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_crash_while_downloading_fails_only_that_download() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = EngineConfig::new(dir.path().join("db"));
+    config.protocols = vec![Arc::new(Crashing)];
+    let e = Engine::start(config).await.unwrap();
+    e.set_settings(Settings {
+        max_concurrent_tasks: 1,
+        ..Settings::default()
+    })
+    .await
+    .unwrap();
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        let spec = TaskSpec::new(http("https://example.com/f"), dir.path());
+        ids.push(e.add(spec).await.unwrap());
+    }
+    for id in ids {
+        let t = wait_for(&e, id, &[TaskStateKind::Failed]).await;
+        assert!(
+            matches!(&t.state, TaskState::Failed { reason, retryable: true } if reason.to_string().contains("crashed")),
+            "{:?}",
+            t.state
+        );
+    }
+    e.shutdown().await;
+}

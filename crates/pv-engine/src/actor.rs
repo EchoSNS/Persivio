@@ -413,7 +413,15 @@ impl Actor {
         };
         let tx = self.internal_tx.clone();
         tokio::spawn(async move {
-            let result = protocol.run(ctx).await;
+            // In its own task: if a protocol (or a library it uses) panics, the actor still
+            // hears that the run ended, and the download fails instead of hanging.
+            let run = tokio::spawn(async move { protocol.run(ctx).await });
+            let result = run.await.unwrap_or_else(|e| {
+                tracing::error!(%id, %e, "a download crashed");
+                Err(ProtocolError::Io(std::io::Error::other(
+                    "the download crashed (a bug); please retry or report it",
+                )))
+            });
             let _ = tx.send(Internal::Finished(id, result));
         });
         self.running.insert(

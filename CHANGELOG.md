@@ -14,9 +14,12 @@ Format: one `## [version] - date` heading per release, then `### Added`, `### Ch
 ### Fixed
 - Browser extension: "Test connection" failed with "not from this extension" in Brave and
   Chrome (downloads were not affected).
+- A crash inside one download no longer leaves it running forever; it fails and can be
+  retried.
 
 ### Security
-- .torrent files with impossible numbers or nesting are refused before they are parsed.
+- .torrent files with impossible numbers or nesting are refused before they are parsed;
+  a crafted file could crash the app.
 - Updates: an older signed installer cannot be passed off as a newer version.
 
 ### Changed

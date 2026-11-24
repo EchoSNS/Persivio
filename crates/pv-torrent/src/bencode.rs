@@ -3,7 +3,7 @@
 //! librqbit's parser multiplies digits without checking for overflow: a build with
 //! overflow checks panics on a huge number (found by fuzzing), a release build wraps it
 //! to another value. This check refuses numbers that cannot be what they claim to be, so
-//! neither can happen. It is iterative: deep nesting cannot exhaust the stack.
+//! neither can happen. A piece length of zero is divided by there. It is iterative: deep nesting cannot exhaust the stack.
 
 /// Deeper than any real torrent (about 6 levels).
 const MAX_DEPTH: usize = 64;
@@ -73,6 +73,9 @@ pub(crate) fn check(bytes: &[u8]) -> Result<(), Problem> {
                 let negative = rest.get(1) == Some(&b'-');
                 let start = if negative { 2 } else { 1 };
                 let (value, used) = number(&rest[start..], b'e')?;
+                if last == b"piece length" && (value == 0 || negative) {
+                    return Err("the piece length is zero");
+                }
                 if value > limit(last) {
                     return Err("a number is too large");
                 }
@@ -124,6 +127,8 @@ mod tests {
         assert!(check(b"i18446744073709551615e").is_err(), "more than i64");
         assert!(check(b"d12:piece lengthi4294967296ee").is_err(), "u32");
         assert!(check(b"d7:privatei256ee").is_err(), "u8");
+        // Found by fuzzing: a division by zero, also in release builds.
+        assert!(check(b"d12:piece lengthi0e6:lengthi4e6:pieces0:e").is_err());
         assert!(
             check(b"ld6:lengthi9223372036854775807eed6:lengthi1eee").is_err(),
             "the sum overflows"

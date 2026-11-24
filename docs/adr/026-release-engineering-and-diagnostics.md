@@ -31,11 +31,12 @@
    repository is private and its build minutes are limited.
 10. **`.torrent` bytes are checked before librqbit parses them** (`bencode::check`). Found
     by fuzzing: numbers overflow in its parser, which panics in builds with overflow checks
-    and wraps in release builds.
+    and wraps in release builds, and a piece length of zero, which it divides by (a panic in
+    every build). Runs also get their own task, so a panic in a library fails that download
+    instead of leaving it running forever.
 
 ## Consequences
 - Until a release key exists, releases contain installers but no updates.
 - Metadata that arrives from peers (magnet links) is parsed inside librqbit and does not
-  pass `bencode::check`. Its size and nesting are limited there, and release builds wrap
-  instead of panicking.
+  pass `bencode::check`. Its nesting is limited there; a panic fails only that download.
 - Installers are not code-signed, so systems warn. `docs/release.md` explains how to add it.
