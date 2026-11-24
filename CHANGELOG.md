@@ -9,6 +9,7 @@ Format: one `## [version] - date` heading per release, then `### Added`, `### Ch
 ## [0.5.1] - 2026-11-25
 
 ### Changed
+- A logo: a persimmon with a download arrow.
 - Dropdown lists match the rest of the interface, with a check mark on the chosen entry.
 
 ### Added

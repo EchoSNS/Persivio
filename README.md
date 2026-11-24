@@ -1,3 +1,5 @@
+<img src="apps/desktop/app-icon.svg" width="96" alt="">
+
 # Persivio
 
 A desktop download manager: a Rust engine with multi-connection segmented HTTP downloads,

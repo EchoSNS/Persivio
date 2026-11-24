@@ -1,11 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Persivio</title>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#14b8a6"/>
-      <stop offset="1" stop-color="#0f766e"/>
-    </linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="0.45" stop-color="#0f8f86"/><stop offset="1" stop-color="#0b5563"/></linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.32"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <radialGradient id="fruit" gradientUnits="userSpaceOnUse" cx="400" cy="450" r="520"><stop offset="0" stop-color="#ffb866"/><stop offset="0.5" stop-color="#f9761a"/><stop offset="1" stop-color="#c8400c"/></radialGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0fdfa"/><stop offset="1" stop-color="#8ff0e0"/></linearGradient>
   </defs>
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
-  <path d="M512 232v384M352 464l160 160 160-160" fill="none" stroke="#fff" stroke-width="88" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M296 760h432" stroke="#fff" stroke-width="88" stroke-linecap="round"/>
+  <rect x="48" y="48" width="928" height="928" rx="212" fill="url(#tile)"/>
+  <rect x="48" y="48" width="928" height="928" rx="212" fill="url(#shine)"/>
+  <!-- A persimmon with its crown of leaves; the arrow says what the app does. -->
+  <g transform="translate(512 540) scale(1.13) translate(-512 -580)">
+    <path d="M512 376 C604 340 716 344 788 404 C852 458 872 540 856 622 C830 762 690 850 512 850 C334 850 194 762 168 622 C152 540 172 458 236 404 C308 344 420 340 512 376 Z" fill="url(#fruit)"/>
+    <ellipse cx="290" cy="486" rx="52" ry="27" transform="rotate(-36 290 486)" fill="#fff" fill-opacity="0.4"/>
+    <g fill="url(#leaf)">
+      <path d="M512 412 C462 318 350 290 262 330 C312 428 424 462 512 412 Z"/>
+      <path d="M512 412 C562 318 674 290 762 330 C712 428 600 462 512 412 Z"/>
+    </g>
+    <path d="M512 506 V738 M400 636 L512 748 L624 636" fill="none" stroke="#fff" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
