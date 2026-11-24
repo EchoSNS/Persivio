@@ -1,0 +1,128 @@
+name: Release
+
+# - A tag `vX.Y.Z` builds installers for every OS into a DRAFT release. Nothing is public
+#   until a person publishes the draft (docs/release.md).
+# - Started by hand, it builds the same installers as workflow artifacts, without a release.
+#
+# Actions are pinned to commits: this workflow handles the update signing key. No build
+# cache for the same reason.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      signed: ${{ steps.check.outputs.signed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check version, changelog and signing key
+        id: check
+        run: node scripts/release-check.mjs
+      - name: Create the draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "Persivio ${{ steps.check.outputs.version }}" --notes-file release-notes.md
+
+  build:
+    needs: prepare
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: ""
+            targets: ""
+          - os: macos-latest
+            args: "--target universal-apple-darwin"
+            targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          # The oldest supported runner: AppImage and deb then run on older systems too.
+          - os: ubuntu-22.04
+            args: ""
+            targets: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          targets: ${{ matrix.targets }}
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev libayatana-appindicator3-dev patchelf xdg-utils
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - name: Frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      # Without a key: installers, but no update packages.
+      - name: Build (dry run)
+        if: env.RELEASE != 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        with:
+          projectPath: apps/desktop
+          args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "[name]_[version]_[platform]_[arch]_[bundle]"
+      - name: Build and upload to the draft
+        if: env.RELEASE == 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Code signing variables go here once they exist (docs/release.md). Not before:
+          # Tauri tries to import an empty APPLE_CERTIFICATE and fails.
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseDraft: true
+          uploadUpdaterJson: ${{ needs.prepare.outputs.signed == 'true' }}
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }} ${{ needs.prepare.outputs.signed == 'true' && '--config src-tauri/tauri.release.conf.json' || '' }}
+
+  finish:
+    needs: [prepare, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Add the browser extension and checksums
+        run: |
+          (cd extension && zip -r "../Persivio-extension_${{ needs.prepare.outputs.version }}.zip" manifest.json options.* src icons README.md)
+          gh release upload "$GITHUB_REF_NAME" Persivio-extension_*.zip --clobber
+          mkdir assets && gh release download "$GITHUB_REF_NAME" --dir assets
+          (cd assets && rm -f SHA256SUMS.txt && sha256sum * > ../SHA256SUMS.txt)
+          gh release upload "$GITHUB_REF_NAME" SHA256SUMS.txt --clobber
+          cat SHA256SUMS.txt

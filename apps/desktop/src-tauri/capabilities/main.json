@@ -31,6 +31,9 @@
     "allow-release-notes",
     "allow-app-version",
     "allow-check-for-update",
-    "allow-install-update"
+    "allow-install-update",
+    "allow-diagnostics-report",
+    "allow-save-diagnostics",
+    "allow-open-logs-folder"
   ]
 }

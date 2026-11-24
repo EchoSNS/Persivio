@@ -59,6 +59,8 @@ machine. The limit per round is 5 minutes.
 
 Targets: `content_range`, `content_disposition`, `sanitize_filename`, `magnet`,
 `torrent_file`; each runs 10 minutes in CI on Linux (libFuzzer needs nightly Rust).
+`torrent_file` found an integer overflow in librqbit's parser within a minute (ADR-026);
+the other four ran clean.
 
 ## Benchmarks
 
@@ -95,8 +97,6 @@ Measured with `cargo llvm-cov nextest` before finding 10 was fixed. Target: 80 %
 ## Not verified
 
 - The two tests that fill a disk *underneath* a running download need a small file system.
-  They run in CI on Linux only and have not been run on Windows or macOS.
-- Update installation, including refusing a tampered installer (manual tests 10.1 to 10.5).
-- The browser extension inside a real browser (manual tests 9.1 to 9.9).
+  They pass in CI on Linux and have not been run on Windows or macOS.
 - The glass theme in WebKitGTK (Linux) and WKWebView (macOS).
 - Power loss. Durability is tested by killing the process, not the machine.

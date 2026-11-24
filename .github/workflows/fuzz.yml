@@ -1,0 +1,61 @@
+name: Fuzz
+
+# 10 minutes per target: weekly, by hand, and when a fuzzed parser changes. Not on every
+# push: the repository's free build minutes are limited.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "fuzz/**"
+      - "crates/pv-core/src/filename.rs"
+      - "crates/pv-http/src/content_range.rs"
+      - "crates/pv-http/src/disposition.rs"
+      - "crates/pv-torrent/src/bencode.rs"
+      - "crates/pv-torrent/src/paths.rs"
+      - ".github/workflows/fuzz.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fuzz:
+    # libFuzzer needs nightly and sanitizer support, which is reliable on Linux.
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [content_range, content_disposition, sanitize_filename, magnet, torrent_file]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz ${{ matrix.target }} for 600s
+        # The prebuilt cargo-fuzz is a musl binary and would default to a musl target.
+        run: |
+          dict="fuzz/dicts/${{ matrix.target }}.dict"
+          args=(-max_total_time=600)
+          if [ -f "$dict" ]; then args+=("-dict=$dict"); fi
+          cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- "${args[@]}"
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/

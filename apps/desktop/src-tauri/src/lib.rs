@@ -18,6 +18,7 @@ pub mod changelog;
 pub mod clipboard;
 pub mod commands;
 pub mod desktop;
+pub mod diagnostics;
 pub mod dto;
 pub mod error;
 pub mod external;
@@ -72,6 +73,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::app_version,
             commands::check_for_update,
             commands::install_update,
+            commands::diagnostics_report,
+            commands::save_diagnostics,
+            commands::open_logs_folder,
         ])
         .events(collect_events![
             EngineUiEvent,
@@ -138,6 +142,9 @@ pub fn run() -> anyhow::Result<()> {
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log_level())
+                // Rolling: at most about 10 MB, and never only a few minutes of history.
+                .max_file_size(2 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(4))
                 // Dependencies are chatty (the DHT logs every packet): warnings and up only.
                 .filter(|meta| {
                     let ours = meta.target().starts_with("persivio")

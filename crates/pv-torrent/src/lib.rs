@@ -6,6 +6,7 @@
 //! mapped onto Persivio's (shared session, list-only metadata step, path validation,
 //! seeding limits), and ADR-023 for resuming without a full re-check.
 
+mod bencode;
 mod have;
 mod motw;
 mod paths;
@@ -311,7 +312,12 @@ impl TorrentProtocol {
                 ctx.events.phase(RunPhase::FetchingMetadata);
                 AddTorrent::from_url(uri.clone())
             }
-            (None, Source::TorrentFile { bytes }) => AddTorrent::from_bytes(bytes.clone()),
+            (None, Source::TorrentFile { bytes }) => {
+                bencode::check(bytes).map_err(|e| {
+                    ProtocolError::InvalidSource(format!("not a valid .torrent file: {e}"))
+                })?;
+                AddTorrent::from_bytes(bytes.clone())
+            }
             (None, Source::Http { .. }) => {
                 return Err(ProtocolError::InvalidSource("not a torrent".to_owned()));
             }
@@ -639,6 +645,7 @@ pub fn inspect_torrent(bytes: &[u8]) -> Result<TorrentInfo, ProtocolError> {
             "the .torrent file is too large".to_owned(),
         ));
     }
+    bencode::check(bytes).map_err(|e| invalid(&e))?;
     let meta = librqbit::torrent_from_bytes(bytes).map_err(|e| invalid(&e))?;
     let info_hash = meta.info_hash.as_string();
     let info = meta.info.data.validate().map_err(|e| invalid(&e))?;

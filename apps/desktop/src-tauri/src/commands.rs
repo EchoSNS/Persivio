@@ -13,7 +13,8 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager as _, State};
+use tauri_plugin_dialog::DialogExt as _;
 use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
@@ -21,6 +22,7 @@ use crate::api::EngineApi;
 use crate::bridge::BridgeStatus;
 use crate::changelog::ReleaseNotesView;
 use crate::desktop::Desktop;
+use crate::diagnostics;
 use crate::dto::{
     AddRequest, MoveDirectionView, ProgressView, SettingsView, TaskDetailView, TaskView,
     TorrentInfoView,
@@ -47,6 +49,12 @@ impl AppState {
             engine,
             progress: Mutex::new(None),
         }
+    }
+
+    /// Why the engine is not running, if it is not.
+    #[must_use]
+    pub fn engine_error(&self) -> Option<&str> {
+        self.engine.as_ref().err().map(String::as_str)
     }
 
     /// The engine, or an `unavailable` error carrying the startup failure.
@@ -342,4 +350,79 @@ pub async fn install_update(
         .install(bytes)
         .map_err(|e| CommandError::unavailable(format!("update install failed: {e}")))?;
     app.restart()
+}
+
+/// The diagnostics report, for the user to read before saving it.
+#[tauri::command]
+#[specta::specta]
+pub async fn diagnostics_report(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, CommandError> {
+    let (settings, tasks) = match state.engine() {
+        Ok(engine) => (
+            engine.settings().await.unwrap_or_default(),
+            engine.list().await.unwrap_or_default(),
+        ),
+        Err(_) => Default::default(),
+    };
+    let dir = log_dir(&app)?;
+    let log = tauri::async_runtime::spawn_blocking(move || diagnostics::read_logs(&dir))
+        .await
+        .unwrap_or_default();
+    Ok(diagnostics::report(&diagnostics::Input {
+        version: env!("CARGO_PKG_VERSION"),
+        settings: &settings,
+        tasks: &tasks,
+        engine_error: state.engine_error(),
+        log: &log,
+    }))
+}
+
+/// Asks where to save the report and writes it. `false`: the user cancelled. The path
+/// comes from the system's dialog, never from the webview.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_diagnostics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, CommandError> {
+    let text = diagnostics_report(app.clone(), state).await?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name("persivio-diagnostics.txt")
+        .add_filter("Text", &["txt"])
+        .save_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let Some(path) = rx.await.ok().flatten() else {
+        return Ok(false);
+    };
+    let path = path
+        .into_path()
+        .map_err(|e| CommandError::invalid(format!("cannot save there: {e}")))?;
+    tauri::async_runtime::spawn_blocking(move || std::fs::write(path, text))
+        .await
+        .map_err(|e| CommandError::invalid(e.to_string()))?
+        .map_err(|e| CommandError::invalid(format!("cannot save the report: {e}")))?;
+    Ok(true)
+}
+
+/// Shows the log folder in the system file manager.
+#[tauri::command]
+#[specta::specta]
+pub fn open_logs_folder(app: AppHandle) -> Result<(), CommandError> {
+    let dir = log_dir(&app)?;
+    let file = dir.join("Persivio.log");
+    let target = if file.exists() { file } else { dir };
+    app.opener()
+        .reveal_item_in_dir(target)
+        .map_err(|e| CommandError::invalid(format!("cannot show the folder: {e}")))
+}
+
+fn log_dir(app: &AppHandle) -> Result<std::path::PathBuf, CommandError> {
+    app.path()
+        .app_log_dir()
+        .map_err(|e| CommandError::invalid(format!("no log folder: {e}")))
 }

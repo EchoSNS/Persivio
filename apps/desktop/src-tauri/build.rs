@@ -27,6 +27,9 @@ const COMMANDS: &[&str] = &[
     "app_version",
     "check_for_update",
     "install_update",
+    "diagnostics_report",
+    "save_diagnostics",
+    "open_logs_folder",
 ];
 
 fn main() {

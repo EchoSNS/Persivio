@@ -9,7 +9,7 @@ use std::sync::{Mutex, PoisonError};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_updater::{Update, UpdaterExt};
+use tauri_plugin_updater::{Update, Updater, UpdaterExt};
 
 /// An available update, as the UI shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -59,9 +59,16 @@ impl Updates {
         &self,
         app: &AppHandle<R>,
     ) -> Result<Option<UpdateView>, String> {
-        let update = app
-            .updater()
-            .map_err(|e| e.to_string())?
+        let updater = app.updater().map_err(|e| e.to_string())?;
+        self.check_with(&updater).await
+    }
+
+    /// [`check`](Self::check) with a given updater (tests use their own endpoint and key).
+    ///
+    /// # Errors
+    /// As for [`check`](Self::check).
+    pub async fn check_with(&self, updater: &Updater) -> Result<Option<UpdateView>, String> {
+        let update = updater
             .check()
             .await
             .map_err(|e| format!("could not check for updates: {e}"))?;

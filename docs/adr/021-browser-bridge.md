@@ -34,6 +34,10 @@ Use the **localhost bridge**, opt-in (off by default), hardened as follows:
    rebinding, where a web page's own domain resolves to 127.0.0.1.
 3. **Origin** must be `chrome-extension://…` or `moz-extension://…`. Web pages cannot set
    these, so a page can neither call the bridge nor pass a CORS preflight.
+   *Corrected 2026-11-24:* Chromium sends **no `Origin`** for an extension's GET (recorded
+   in Brave: `Sec-Fetch-Site: none`), so "Test connection" was refused. A missing Origin is
+   accepted if `Sec-Fetch-Site` is `none` or absent. Browsers set that header on requests
+   from pages and pages cannot change it, and the token is still required.
 4. **Pairing token**: 256 random bits (OS RNG), shown in Settings, pasted once into the
    extension, sent as `Authorization: Bearer`. Compared in constant time, and can be
    regenerated. This is what stops other local programs.
@@ -62,4 +66,4 @@ It talks only to `127.0.0.1`.
   restarting the app; a busy port is reported in Settings.
 - Tests: token, origin and Host rejections, payload limits, and an end-to-end download
   behind a cookie login through the bridge into the engine, plus extension logic tests
-  run with `node --test`.
+  run with `node --test`. The real extension in real Brave: `scripts/extension-e2e.mjs`.

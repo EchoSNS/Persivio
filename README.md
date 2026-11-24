@@ -4,7 +4,37 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** Phase 11 (v0.3.0) — HTTP and BitTorrent downloads, a CLI, a desktop app with OS integration, a browser extension for Brave/Chromium, and signed updates (local channel). See [CHANGELOG.md](CHANGELOG.md), [docs/updates.md](docs/updates.md) and the [hardening report](docs/hardening-report.md).
+> **Status:** version 0.4.0, in personal use on Windows. macOS and Linux builds are made and
+> tested automatically but have not been used day to day. See [CHANGELOG.md](CHANGELOG.md),
+> [known limits](docs/hardening-report.md#not-verified) and [how to release](docs/release.md).
+
+![The download list](docs/images/list-dark.png)
+
+| Light theme, details and menu | Settings |
+|---|---|
+| ![Light theme](docs/images/menu-light.png) | ![Settings](docs/images/settings-dark.png) |
+
+*(Screenshots with sample data.)*
+
+## Features
+
+- **Fast HTTP downloads** over several connections that help each other, with pause, resume
+  and recovery after a crash; checksums; speed limits, per download and in total.
+- **BitTorrent**: magnet links and `.torrent` files, file selection, seeding limits. Off the
+  network when nothing runs.
+- **Browser extension** for Brave, Chrome and Edge, including downloads behind a login.
+- **Desktop**: queue, categories, search, sorting, tray, notifications, clipboard offers,
+  drag and drop, keyboard control, light, dark and solid themes.
+- **Private by design**: no accounts, no telemetry. Cookies go only to their own site and are
+  erased when a download ends.
+- **Signed updates** with release notes. A command-line version is included.
+
+## Responsible use
+
+Persivio is a neutral tool. Download and share only what you have the right to. With
+BitTorrent, other participants see your IP address, and by default you upload to them too
+(Settings → BitTorrent). Check files from strangers before opening them: Persivio never
+opens or runs a download by itself.
 
 ## Layout
 
@@ -77,4 +107,4 @@ interrupted downloads resume on the next `watch` (or automatically with
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0, at your option.
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

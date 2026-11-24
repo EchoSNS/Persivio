@@ -50,3 +50,4 @@ apps/desktop/build/
 
 # Local update channel (scripts/release-local.ps1)
 /dist-updates/
+release-notes.md

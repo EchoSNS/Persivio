@@ -4,7 +4,8 @@
 //! 1. **Host check**: `Host` is `127.0.0.1:<port>` or `localhost:<port>`. This defeats
 //!    DNS rebinding (a web page whose domain resolves to 127.0.0.1).
 //! 2. **Origin check**: `Origin` is a browser extension (`chrome-extension://` or
-//!    `moz-extension://`), never a web page.
+//!    `moz-extension://`), never a web page. Chromium leaves `Origin` out of an
+//!    extension's GET requests; then `Sec-Fetch-Site` must not name a web page either.
 //! 3. **Token**: `Authorization: Bearer <pairing token>`, compared in constant time.
 //! 4. **Size and content limits**: bodies up to 64 KiB, validated fields.
 //!
@@ -108,6 +109,20 @@ fn header_str(headers: &HeaderMap, name: header::HeaderName) -> Option<&str> {
     headers.get(name).and_then(|v| v.to_str().ok())
 }
 
+/// Who calls: `Some(Some(origin))` for an extension that names itself, `Some(None)` for a
+/// request that no web page can have made, `None` for everything else.
+#[allow(clippy::option_option, reason = "three cases, explained above")]
+fn allowed_caller(headers: &HeaderMap, preflight: bool) -> Option<Option<HeaderValue>> {
+    if let Some(origin) = headers.get(header::ORIGIN) {
+        let ok = origin.to_str().is_ok_and(is_extension_origin);
+        return ok.then(|| Some(origin.clone()));
+    }
+    // Browsers add `Sec-Fetch-Site` to what pages request, and pages cannot change it.
+    // `none` (or no such header: not a browser) is not from a page. The token decides.
+    let site = headers.get("sec-fetch-site").map(HeaderValue::as_bytes);
+    (!preflight && matches!(site, None | Some(b"none"))).then_some(None)
+}
+
 async fn guard(State(state): State<BridgeState>, request: Request, next: Next) -> Response {
     let headers = request.headers();
     let host_ok = header_str(headers, header::HOST).is_some_and(|h| {
@@ -116,15 +131,14 @@ async fn guard(State(state): State<BridgeState>, request: Request, next: Next) -
     if !host_ok {
         return reject(StatusCode::FORBIDDEN, "invalid host");
     }
-    let Some(origin) = header_str(headers, header::ORIGIN).filter(|o| is_extension_origin(o))
-    else {
+    let preflight = request.method() == Method::OPTIONS;
+    let Some(allow_origin) = allowed_caller(headers, preflight) else {
         return reject(
             StatusCode::FORBIDDEN,
             "only the Persivio browser extension may call this",
         );
     };
-    let allow_origin = HeaderValue::from_str(origin).ok();
-    if request.method() == Method::OPTIONS {
+    if preflight {
         let mut response = StatusCode::NO_CONTENT.into_response();
         let h = response.headers_mut();
         if let Some(o) = allow_origin {

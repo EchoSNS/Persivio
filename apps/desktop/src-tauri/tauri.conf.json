@@ -51,7 +51,28 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi", "dmg", "app", "appimage", "deb"],
+    "publisher": "Yvan Sinues",
+    "copyright": "Copyright (c) 2026 Yvan Sinues",
+    "homepage": "https://github.com/EchoSNS/Persivio",
+    "license": "MIT OR Apache-2.0",
+    "category": "Utility",
+    "shortDescription": "Download manager",
+    "longDescription": "Fast downloads over several connections, BitTorrent and magnet links, a queue, speed limits and browser integration.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    },
+    "linux": {
+      "deb": {
+        "section": "net"
+      }
+    },
     "fileAssociations": [
       {
         "ext": [
@@ -73,6 +94,7 @@
   },
   "plugins": {
     "updater": {
+      "requireSignedVersion": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGNTM0NzE0RTkzMjM3MDAKUldRQU56THBGRWRUSDA2S1ZMVWdUMXVHS1Y2Wml5eDRyQUdXV1Jzck05RWg0TVpHcWE1OTM1LysK",
       "endpoints": [
         "https://github.com/EchoSNS/Persivio/releases/latest/download/latest.json"

@@ -62,6 +62,15 @@ export const commands = {
 	 *  gracefully (downloads checkpoint), installs it and restarts the app.
 	 */
 	installUpdate: (onProgress: Channel<UpdateProgress>, options?: InvokeOptions) => __TAURI_INVOKE<null>("install_update", { onProgress }, options),
+	/**  The diagnostics report, for the user to read before saving it. */
+	diagnosticsReport: (options?: InvokeOptions) => __TAURI_INVOKE<string>("diagnostics_report", undefined, options),
+	/**
+	 *  Asks where to save the report and writes it. `false`: the user cancelled. The path
+	 *  comes from the system's dialog, never from the webview.
+	 */
+	saveDiagnostics: (options?: InvokeOptions) => __TAURI_INVOKE<boolean>("save_diagnostics", undefined, options),
+	/**  Shows the log folder in the system file manager. */
+	openLogsFolder: (options?: InvokeOptions) => __TAURI_INVOKE<null>("open_logs_folder", undefined, options),
 };
 
 /** Events */

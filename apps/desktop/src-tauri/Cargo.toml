@@ -28,6 +28,7 @@ getrandom = { workspace = true }
 keepawake = { workspace = true }
 pv-core = { workspace = true }
 pv-engine = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 specta = { workspace = true }
@@ -50,11 +51,12 @@ tracing = { workspace = true, features = ["log"] }
 url = { workspace = true }
 
 [dev-dependencies]
+minisign = { workspace = true }
 pv-testkit = { workspace = true }
-tower = { workspace = true }
-
+tauri = { workspace = true, features = ["test"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "test-util"] }
+tower = { workspace = true }
 
 [lints]
 workspace = true

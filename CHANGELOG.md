@@ -6,6 +6,23 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
+## [0.4.0] - 2026-11-24
+
+### Added
+- Settings → Diagnostics: a report without personal data, and the logs folder.
+
+### Fixed
+- Browser extension: "Test connection" failed with "not from this extension" in Brave and
+  Chrome (downloads were not affected).
+
+### Security
+- .torrent files with impossible numbers or nesting are refused before they are parsed.
+- Updates: an older signed installer cannot be passed off as a newer version.
+
+### Changed
+- The publisher shown by Windows is Yvan Sinues.
+- The log keeps more history (up to 10 MB) and no longer fills with tracker warnings.
+
 ## [0.3.0] - 2026-11-24
 
 ### Added

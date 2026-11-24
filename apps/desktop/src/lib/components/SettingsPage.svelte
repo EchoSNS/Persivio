@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { open as openDialog } from '@tauri-apps/plugin-dialog';
-	import { Copy, FolderOpen, Monitor, Moon, Plus, RefreshCw, Sun, X } from '@lucide/svelte';
+	import { Copy, FileText, FolderOpen, Monitor, Moon, Plus, RefreshCw, Save, Sun, X } from '@lucide/svelte';
 	import {
 		commands,
 		errorMessage,
@@ -8,6 +8,7 @@
 		type SettingsView,
 		type UpdateView
 	} from '#lib/api/index.ts';
+	import Modal from './Modal.svelte';
 	import { SHORTCUTS } from '#lib/shortcuts.ts';
 	import { theme, type ThemeChoice } from '#lib/stores/theme.svelte.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
@@ -142,6 +143,32 @@
 		}
 	}
 
+	let report = $state<string | null>(null);
+
+	async function showReport() {
+		try {
+			report = await commands.diagnosticsReport();
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
+
+	async function saveReport() {
+		try {
+			if (await commands.saveDiagnostics()) toasts.info('Report saved');
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
+
+	async function openLogs() {
+		try {
+			await commands.openLogsFolder();
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
+
 	async function browse() {
 		if (!draft) return;
 		const dir = await openDialog({ directory: true, defaultPath: draft.downloadDir ?? undefined });
@@ -199,6 +226,13 @@
 		{ value: 'dark', label: 'Dark', Icon: Moon }
 	];
 </script>
+
+<Modal open={report !== null} title="Diagnostics report" wide onclose={() => (report = null)}>
+	<pre class="max-h-[60vh] overflow-auto rounded-xl border border-(--line) bg-(--field) p-3 text-xs whitespace-pre-wrap select-text">{report}</pre>
+	{#snippet footer()}
+		<button type="button" class="btn" onclick={saveReport}><Save size={14} /> Save report…</button>
+	{/snippet}
+</Modal>
 
 {#snippet section(title: string)}
 	<h2 class="mb-3 text-sm font-semibold">{title}</h2>
@@ -433,6 +467,19 @@
 				</div>
 			</section>
 		{/if}
+
+		<section class="panel p-4">
+			{@render section('Diagnostics')}
+			<p class="text-sm">
+				A report for reporting a problem: version, system, settings and the log. Links, file names,
+				addresses, folders and tokens are removed. Nothing is sent anywhere.
+			</p>
+			<div class="mt-3 flex flex-wrap gap-2">
+				<button type="button" class="btn" onclick={showReport}><FileText size={14} /> View report</button>
+				<button type="button" class="btn" onclick={saveReport}><Save size={14} /> Save report…</button>
+				<button type="button" class="btn" onclick={openLogs}><FolderOpen size={14} /> Open logs folder</button>
+			</div>
+		</section>
 
 		<section class="panel p-4">
 			{@render section('Appearance')}

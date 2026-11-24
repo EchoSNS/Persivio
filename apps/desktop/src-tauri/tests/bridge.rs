@@ -86,6 +86,7 @@ fn host() -> String {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one table of refused requests")]
 async fn requests_without_the_token_or_from_web_pages_are_rejected() {
     let env = env().await;
     let r = env.router();
@@ -123,8 +124,8 @@ async fn requests_without_the_token_or_from_web_pages_are_rejected() {
         .await,
         StatusCode::UNAUTHORIZED
     );
-    // A web page, even with the token (e.g. leaked), and a missing Origin.
-    for origin in [Some("https://evil.example"), Some("null"), None] {
+    // A web page, even with the token (e.g. leaked).
+    for origin in ["https://evil.example", "null", ""].map(Some) {
         assert_eq!(
             status(
                 &r,
@@ -135,6 +136,41 @@ async fn requests_without_the_token_or_from_web_pages_are_rejected() {
             "{origin:?}"
         );
     }
+    // What Brave really sends for an extension's GET (recorded on 2026-11-24): no Origin,
+    // `Sec-Fetch-Site: none`. The token is still required.
+    let without_origin = |site: Option<&str>, token: Option<&str>| {
+        let mut req = request("GET", "/v1/ping", &h, None, token, None);
+        if let Some(site) = site {
+            req.headers_mut()
+                .insert("sec-fetch-site", site.parse().unwrap());
+        }
+        req
+    };
+    for (site, token, expected) in [
+        (Some("none"), Some(token), StatusCode::OK),
+        (None, Some(token), StatusCode::OK),
+        (Some("none"), None, StatusCode::UNAUTHORIZED),
+        (Some("none"), Some("wrong"), StatusCode::UNAUTHORIZED),
+        // A page's request without Origin (an image, a navigation) says where it is from.
+        (Some("cross-site"), Some(token), StatusCode::FORBIDDEN),
+        (Some("same-site"), Some(token), StatusCode::FORBIDDEN),
+        (Some("same-origin"), Some(token), StatusCode::FORBIDDEN),
+    ] {
+        assert_eq!(
+            status(&r, without_origin(site, token)).await,
+            expected,
+            "{site:?} {token:?}"
+        );
+    }
+    // A preflight always has an Origin.
+    assert_eq!(
+        status(
+            &r,
+            request("OPTIONS", "/v1/downloads", &h, None, None, None)
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
     // DNS rebinding: a foreign Host name pointing at 127.0.0.1.
     assert_eq!(
         status(
@@ -399,5 +435,44 @@ async fn the_supervisor_follows_the_settings_and_reports_busy_ports() {
 
     drop(tx);
     supervisor.await.unwrap();
+    env.engine.shutdown().await;
+}
+
+/// For checking the extension in a real browser by hand or with a script: serves a bridge
+/// and a site with a login until stdin closes. Prints one line of JSON with the details.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "interactive: serves until stdin closes"]
+async fn serve_for_a_real_browser() {
+    let f = Fixture::random("private.zip", 3_000_000, 9);
+    let server = TestServer::start([f.clone()]).await.unwrap();
+    let env = env().await;
+    let port = free_port();
+    let (_tx, rx) = tokio::sync::watch::channel(pv_core::DesktopSettings {
+        browser_bridge: true,
+        bridge_port: port,
+        bridge_token: env.token.clone(),
+        ..pv_core::DesktopSettings::default()
+    });
+    tokio::spawn(bridge::supervise(
+        rx,
+        Arc::new(env.engine.clone()),
+        Some(env.downloads.clone()),
+        Arc::default(),
+    ));
+    println!(
+        "SERVING {}",
+        serde_json::json!({
+            "port": port,
+            "token": env.token,
+            "url": server.url("/auth/private.zip"),
+            "cookie": AUTH_COOKIE,
+            "sha256": f.sha256,
+            "dir": env.downloads,
+        })
+    );
+    tokio::task::spawn_blocking(|| std::io::stdin().read_line(&mut String::new()))
+        .await
+        .unwrap()
+        .unwrap();
     env.engine.shutdown().await;
 }

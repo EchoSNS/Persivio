@@ -33,7 +33,7 @@ HTTPS.
 ## One-time setup (done)
 
 - **Signing key:** `C:\Users\yvans\.tauri\persivio-local.key` (private, no password) and
-  `persivio-local.key.pub` (public). The public key is in `tauri.conf.json`.
+  `persivio-local.key.pub` (public). The public key is in `tauri.local.conf.json`.
   - **Never commit the private key, or copy it into the repository.** Anyone who has it
     can sign "updates" that installed copies will accept.
   - Back it up somewhere safe (e.g. a password manager). If it is lost, installed copies
@@ -52,7 +52,7 @@ It installs for your user only (no administrator rights), adds Start-menu entrie
 registers `.torrent` files.
 
 - Windows SmartScreen will say "Windows protected your PC" because the installer is not
-  code-signed yet (see [Online updates](#online-updates-later)). Click **More info →
+  code-signed yet (see [release.md](release.md)). Click **More info →
   Run anyway**.
 - The installed app and `npm run tauri dev` share the same data folder and lock, so only
   one can run at a time. Quit the installed app (tray → Quit) before developing, or
@@ -94,30 +94,10 @@ registers `.torrent` files.
 The server only answers on `127.0.0.1`, serves files from `dist-updates/` only, and can
 be stopped when you are not updating. `dist-updates/` is ignored by git.
 
-## Online updates (later)
+## Online updates
 
-When Persivio should update for other people (or on other computers):
-
-1. **Create a production signing key** with a password, and store both as GitHub
-   repository secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`):
-
-   ```powershell
-   cd apps\desktop
-   npx tauri signer generate -w $env:USERPROFILE\.tauri\persivio-release.key
-   ```
-
-   Put the new `.pub` contents in `tauri.conf.json` → `plugins.updater.pubkey`. Copies
-   installed with the local key must be reinstalled once by hand (they trust the old
-   key only). That is fine while only this computer uses Persivio.
-2. **Release workflow** (Phase 12): a GitHub Actions workflow on tag push (`v0.3.0`) runs
-   `tauri-action`, which builds installers for Windows, macOS and Linux, signs them with
-   the secrets, creates a GitHub Release with the changelog entry as notes, and uploads
-   `latest.json`. The endpoint in `tauri.conf.json` already points at it.
-3. **Code signing** (removes the SmartScreen and macOS Gatekeeper warnings): a Windows
-   code-signing certificate (or Azure Trusted Signing) and an Apple Developer ID with
-   notarization. They are separate from the update signature, and Phase 12 documents
-   them in `docs/release.md`.
-4. Optionally keep the local channel for testing builds before publishing them.
+Prepared in version 0.4.0: see [release.md](release.md). It needs a decision (where the
+releases are public) and a release signing key.
 
 ## Troubleshooting
 

@@ -142,3 +142,5 @@ Setup: `docs/updates.md`.
 | Date | OS / version | App version | Sections | Result | Notes |
 |---|---|---|---|---|---|
 | 2026-11-23 | Windows 11 Pro | 0.1.0 (dev) | 2.1, 2.3 (simulated: second launch with a magnet argument), 1.4, 1.5 (relaunch shows the window), autostart `--minimized` start | Pass | Registry registration (2.2) and a real browser click are left to the user. |
+| 2026-11-24 | Windows 11 Pro, Brave | 0.4.0 (dev) | 9.1, 9.2, 9.3, 9.4, 9.5, 9.9 (scripted: `scripts/extension-e2e.mjs`) | Pass | Test connection failed in 0.3.0 and was fixed. |
+| 2026-11-24 | Windows 11 Pro | 0.2.0 to 0.3.0 | 10.2, 10.3 (by the user, local channel) | Pass | 10.5 (tampering) is automated in `tests/updates.rs`. |
