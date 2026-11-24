@@ -102,7 +102,8 @@ describe('speed history', () => {
 						etaSecs: null,
 						connections: 1,
 						peers: null,
-						uploadBps: null
+						uploadBps: null,
+						checkPercent: null
 					}
 				],
 				3

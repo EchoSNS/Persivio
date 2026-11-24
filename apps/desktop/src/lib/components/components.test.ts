@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { X } from '@lucide/svelte';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import type { TaskView } from '#lib/api/bindings.ts';
 import { toRow, type TaskRow as Row } from '#lib/stores/reducer.ts';
 import { EMPTY } from '#lib/stores/selection.ts';
+import ContextMenu from './ContextMenu.svelte';
 import FileSelector from './FileSelector.svelte';
 import SegmentBar from './SegmentBar.svelte';
 import StateBadge from './StateBadge.svelte';
@@ -34,6 +36,7 @@ function handlers() {
 	return {
 		onselect: vi.fn(),
 		onopen: vi.fn(),
+		onmenu: vi.fn(),
 		onpause: vi.fn(),
 		onresume: vi.fn(),
 		onremove: vi.fn(),
@@ -89,6 +92,58 @@ describe('TaskRow', () => {
 	});
 });
 
+describe('checking existing data', () => {
+	it('shows the check, not a download: own percentage, no speed', () => {
+		render(TaskRow, {
+			task: row('a', { state: { type: 'checking' } }, { checkPercent: 80, speedBps: 999_999 }),
+			selected: false,
+			focused: false,
+			...handlers()
+		});
+		expect(screen.getByText('Checking files')).toBeTruthy();
+		expect(screen.getByText('80%')).toBeTruthy();
+		expect(screen.queryByText(/[/]s$/)).toBeNull();
+		expect(
+			screen.getByRole('progressbar', { name: 'Check progress of a.iso' }).getAttribute('aria-valuenow')
+		).toBe('80');
+	});
+});
+
+describe('ContextMenu', () => {
+	it('moves with the arrow keys, skips disabled items, runs and closes', async () => {
+		const run = vi.fn();
+		const onclose = vi.fn();
+		const outside = vi.fn();
+		document.body.addEventListener('keydown', outside);
+		render(ContextMenu, {
+			x: 5,
+			y: 5,
+			label: 'Actions',
+			onclose,
+			items: [
+				{ label: 'Pause', icon: X, run: vi.fn() },
+				{ label: 'Nope', icon: X, run: vi.fn(), disabled: true },
+				'separator',
+				{ label: 'Remove', icon: X, run }
+			]
+		});
+		const pause = screen.getByRole('menuitem', { name: 'Pause' });
+		const remove = screen.getByRole('menuitem', { name: 'Remove' });
+		expect(document.activeElement).toBe(pause);
+		await fireEvent.keyDown(pause, { key: 'ArrowDown' });
+		expect(document.activeElement).toBe(remove);
+		await fireEvent.keyDown(remove, { key: 'ArrowDown' });
+		expect(document.activeElement).toBe(pause);
+		await fireEvent.click(remove);
+		expect(run).toHaveBeenCalledOnce();
+		expect(onclose).toHaveBeenCalledOnce();
+		await fireEvent.keyDown(remove, { key: 'Escape' });
+		expect(onclose).toHaveBeenCalledTimes(2);
+		expect(outside).not.toHaveBeenCalled();
+		document.body.removeEventListener('keydown', outside);
+	});
+});
+
 describe('TaskList', () => {
 	it('renders only a window of 500 rows (virtualized)', () => {
 		const rows = Array.from({ length: 500 }, (_, i) => row(`t${i}`));
@@ -101,7 +156,7 @@ describe('TaskList', () => {
 		const rendered = screen.queryAllByRole('option').length;
 		expect(rendered).toBeLessThan(40);
 		const spacer = container.querySelector('[role="listbox"] > div') as HTMLElement;
-		expect(spacer.style.height).toBe(`${500 * 56}px`);
+		expect(spacer.style.height).toBe(`${500 * 74}px`);
 	});
 });
 

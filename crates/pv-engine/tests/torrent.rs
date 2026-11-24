@@ -35,7 +35,10 @@ async fn engine(db: &Path, seeder: &LocalSeeder) -> EngineHandle {
     let mut config = EngineConfig::new(db);
     config.protocols = vec![
         Arc::new(HttpProtocol),
-        Arc::new(TorrentProtocol::new().with_initial_peers(vec![seeder.addr])),
+        Arc::new(
+            TorrentProtocol::with_work_dir(db.with_file_name("torrent-session"))
+                .with_initial_peers(vec![seeder.addr]),
+        ),
     ];
     let e = Engine::start(config).await.unwrap();
     e.set_settings(settings()).await.unwrap();
@@ -148,6 +151,11 @@ async fn magnet_survives_an_engine_restart_without_refetching_metadata() {
     let e2 = engine(&db, &seeder).await;
     let t = task(&e2, id).await;
     assert_eq!(t.state, TaskState::Paused, "recovered as paused");
+    assert!(
+        t.downloaded >= 600_000,
+        "progress is known before the torrent runs again: {}",
+        t.downloaded
+    );
     let mut events = e2.subscribe();
     e2.resume(id).await.unwrap();
     wait_for(&e2, id, TaskStateKind::Completed).await;
@@ -161,6 +169,12 @@ async fn magnet_survives_an_engine_restart_without_refetching_metadata() {
     assert!(
         !phases.contains(&TaskStateKind::FetchingMetadata),
         "metadata came from the database: {phases:?}"
+    );
+    let checking = phases.iter().position(|k| *k == TaskStateKind::Checking);
+    let downloading = phases.iter().position(|k| *k == TaskStateKind::Downloading);
+    assert!(
+        checking.is_some() && checking < downloading,
+        "a resume checks before it downloads: {phases:?}"
     );
     e2.shutdown().await;
     seeder.stop().await;

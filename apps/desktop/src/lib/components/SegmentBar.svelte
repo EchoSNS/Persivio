@@ -14,7 +14,7 @@
 <svg
 	viewBox="0 0 {W} 10"
 	preserveAspectRatio="none"
-	class="h-3 w-full overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800"
+	class="h-3 w-full overflow-hidden rounded-full fill-none bg-(--track)"
 	role="img"
 	aria-label="{segments.length} segments"
 >
@@ -26,7 +26,7 @@
 			y="0"
 			width={Math.max(0, x(s.start + s.downloaded) - x(s.start))}
 			height="10"
-			class={i % 2 === 0 ? 'fill-teal-500' : 'fill-teal-600'}
+			class={i % 2 === 0 ? 'fill-teal-500' : 'fill-cyan-500'}
 		/>
 		<line x1={x(s.start) + width} y1="0" x2={x(s.start) + width} y2="10" class="stroke-white/60 dark:stroke-zinc-950/60" vector-effect="non-scaling-stroke" />
 	{/each}

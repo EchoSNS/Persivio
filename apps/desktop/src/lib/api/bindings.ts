@@ -294,6 +294,8 @@ export type ProgressView = {
 	peers: number | null,
 	/**  Torrent: upload speed, bytes/second. */
 	uploadBps: number | null,
+	/**  While existing data is re-checked: percent done. */
+	checkPercent: number | null,
 };
 
 /**  One release's notes. */
@@ -383,6 +385,8 @@ export type TaskStateView =
 { type: "probing" } | 
 /**  Torrent: getting metadata from peers. */
 { type: "fetching_metadata" } | 
+/**  Torrent: re-checking the data already on disk. */
+{ type: "checking" } | 
 /**  Transferring data. */
 { type: "downloading" } | 
 /**  Stopped by the user; can be resumed. */

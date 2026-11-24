@@ -46,6 +46,7 @@ fn is_running(state: &TaskState) -> bool {
         state,
         TaskState::Probing
             | TaskState::FetchingMetadata
+            | TaskState::Checking
             | TaskState::Downloading
             | TaskState::Verifying
             | TaskState::Seeding
@@ -320,6 +321,7 @@ mod tests {
             connections_active: 1,
             peers: None,
             upload_bps: up,
+            check_percent: None,
         };
         let effects = a.apply(
             &EngineEvent::ProgressBatch(vec![p(1024 * 1024, None), p(512 * 1024, Some(2048))]),

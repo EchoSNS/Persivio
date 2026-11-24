@@ -23,7 +23,7 @@ use pv_torrent::testing::LocalSeeder;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Default)]
-struct Sink(Mutex<Option<TorrentResume>>);
+struct Sink(Mutex<Option<TorrentResume>>, Mutex<u64>);
 
 #[async_trait]
 impl CheckpointSink for Sink {
@@ -42,7 +42,18 @@ impl CheckpointSink for Sink {
         *self.0.lock().unwrap() = Some(TorrentResume {
             info_hash: hash.to_owned(),
             torrent_bytes: bytes.to_vec(),
+            have: None,
         });
+        Ok(())
+    }
+    async fn save_torrent_progress(
+        &self,
+        _: TaskId,
+        downloaded: u64,
+        have: Option<&[u8]>,
+    ) -> Result<(), CheckpointError> {
+        self.0.lock().unwrap().as_mut().unwrap().have = have.map(<[u8]>::to_vec);
+        *self.1.lock().unwrap() = downloaded;
         Ok(())
     }
 }
@@ -442,4 +453,252 @@ async fn torrent_files_can_be_inspected_without_downloading() {
     assert!(
         pv_torrent::inspect_torrent(&vec![b'd'; pv_torrent::MAX_TORRENT_FILE_SIZE + 1]).is_err()
     );
+}
+
+/// Regression: while librqbit re-checks existing data, its counter means "bytes hashed".
+/// Showing that as downloaded looked like a very fast download that then started over.
+#[tokio::test(flavor = "multi_thread")]
+async fn checking_existing_data_is_not_reported_as_downloading() {
+    let dir = tempfile::tempdir().unwrap();
+    // Large enough that the check lasts several progress polls.
+    let f = Fixture::random("check.bin", 96 * 1024 * 1024, 7);
+    std::fs::create_dir_all(dir.path().join("seed")).unwrap();
+    let src = dir.path().join("seed/check.bin");
+    std::fs::write(&src, &f.bytes).unwrap();
+    let seeder = seed(&src, "check.bin").await;
+    let dest = dir.path().join("dl");
+    std::fs::create_dir_all(&dest).unwrap();
+    // A wrong first half: hashing reads all of it, but only the second half counts.
+    let mut half = vec![0u8; f.bytes.len()];
+    let mid = f.bytes.len() / 2;
+    half[mid..].copy_from_slice(&f.bytes[mid..]);
+    std::fs::write(dest.join("check.bin"), &half).unwrap();
+
+    let protocol = Arc::new(TorrentProtocol::new().with_initial_peers(vec![seeder.addr]));
+    let mut r = run_ctx(
+        Source::TorrentFile {
+            bytes: seeder.torrent.clone(),
+        },
+        &dest,
+        settings(true),
+    );
+    r.ctx.resume.torrent = Some(TorrentResume {
+        info_hash: String::new(),
+        torrent_bytes: seeder.torrent.clone(),
+        have: None,
+    });
+    r.ctx.task.spec.file_name = Some("check.bin".into());
+    r.ctx.task.spec.speed_limit_bps = Some(4_000_000);
+    let progress = r.ctx.progress.clone();
+    let cancel = r.ctx.cancel.clone();
+    let events = r.events.clone();
+    let p = protocol.clone();
+    let handle = tokio::spawn(async move { p.run(r.ctx).await });
+    let mut checked = 0;
+    loop {
+        let phases = events.phases.lock().unwrap().clone();
+        if phases.contains(&RunPhase::Downloading) {
+            break;
+        }
+        let s = progress.sample();
+        assert_eq!(s.downloaded, 0, "nothing is downloaded while checking");
+        checked = checked.max(s.check_percent.unwrap_or(0));
+        assert!(!handle.is_finished(), "ended early");
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    assert!(checked > 0, "check progress is reported separately");
+    let s = progress.sample();
+    assert_eq!(s.check_percent, None);
+    assert!(
+        s.downloaded >= mid as u64 - 16_384,
+        "the valid half is kept: {}",
+        s.downloaded
+    );
+    cancel.cancel();
+    assert_eq!(handle.await.unwrap().unwrap(), Outcome::Stopped);
+    assert_eq!(
+        *events.phases.lock().unwrap(),
+        [RunPhase::Checking, RunPhase::Downloading]
+    );
+    protocol.stop().await;
+}
+
+/// Runs `r` until `bytes` are downloaded, then pauses it. Returns what was saved.
+async fn run_until(protocol: &Arc<TorrentProtocol>, r: Run, bytes: u64) -> (TorrentResume, u64) {
+    let progress = r.ctx.progress.clone();
+    let cancel = r.ctx.cancel.clone();
+    let p = protocol.clone();
+    let handle = tokio::spawn(async move { p.run(r.ctx).await });
+    while progress.sample().downloaded < bytes {
+        assert!(!handle.is_finished(), "ended early");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    cancel.cancel();
+    assert_eq!(handle.await.unwrap().unwrap(), Outcome::Stopped);
+    let saved = r.sink.0.lock().unwrap().clone().unwrap();
+    let downloaded = *r.sink.1.lock().unwrap();
+    (saved, downloaded)
+}
+
+/// Runs a resume until it starts downloading; returns how much it found on disk.
+async fn found_on_resume(protocol: &Arc<TorrentProtocol>, r: Run) -> (u64, Vec<RunPhase>) {
+    let (events, progress) = (r.events.clone(), r.ctx.progress.clone());
+    let (cancel, p) = (r.ctx.cancel.clone(), protocol.clone());
+    let handle = tokio::spawn(async move { p.run(r.ctx).await });
+    while !events
+        .phases
+        .lock()
+        .unwrap()
+        .contains(&RunPhase::Downloading)
+    {
+        assert!(!handle.is_finished(), "ended early");
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    let found = progress.sample().downloaded;
+    cancel.cancel();
+    handle.await.unwrap().unwrap();
+    let phases = events.phases.lock().unwrap().clone();
+    (found, phases)
+}
+
+/// After a clean pause, even across a restart, a resume trusts the saved piece map instead
+/// of reading everything again. Proven with a map edited to claim less than is on disk:
+/// a full check would find all of it. Once the file changed, the map is ignored.
+#[tokio::test(flavor = "multi_thread")]
+async fn clean_resumes_skip_the_full_check_until_the_files_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = Fixture::random("fast.bin", 8_000_000, 8);
+    std::fs::create_dir_all(dir.path().join("seed")).unwrap();
+    let src = dir.path().join("seed/fast.bin");
+    std::fs::write(&src, &f.bytes).unwrap();
+    let seeder = seed(&src, "fast.bin").await;
+    let dest = dir.path().join("dl");
+    let new_protocol = || {
+        Arc::new(
+            TorrentProtocol::with_work_dir(dir.path().join("work"))
+                .with_initial_peers(vec![seeder.addr]),
+        )
+    };
+    let new_run = |resume: Option<TorrentResume>| {
+        let source = Source::TorrentFile {
+            bytes: seeder.torrent.clone(),
+        };
+        let mut r = run_ctx(source, &dest, settings(true));
+        r.ctx.task.spec.speed_limit_bps = Some(1_500_000);
+        if resume.is_some() {
+            r.ctx.task.spec.file_name = Some("fast.bin".into());
+            // Also the burst size: little new data hides what was found on disk.
+            r.ctx.task.spec.speed_limit_bps = Some(100_000);
+        }
+        r.ctx.resume.torrent = resume;
+        r
+    };
+    let protocol = new_protocol();
+    let (saved, downloaded) = run_until(&protocol, new_run(None), 2_000_000).await;
+    assert!(downloaded >= 2_000_000, "{downloaded}");
+    protocol.stop().await;
+
+    let mut map: serde_json::Value =
+        serde_json::from_slice(saved.have.as_deref().expect("a clean pause saves the map"))
+            .unwrap();
+    for (i, byte) in map["bits"].as_array_mut().unwrap().iter_mut().enumerate() {
+        if i % 2 == 1 {
+            *byte = 0.into();
+        }
+    }
+    let mut less = saved.clone();
+    less.have = Some(serde_json::to_vec(&map).unwrap());
+    let protocol = new_protocol();
+    let (found, phases) = found_on_resume(&protocol, new_run(Some(less))).await;
+    assert!(
+        found > 0 && found < downloaded * 3 / 4,
+        "the map was used: found {found} of {downloaded}"
+    );
+    assert_eq!(phases, [RunPhase::Checking, RunPhase::Downloading]);
+
+    // That run wrote to the file, so the first map no longer matches: full check.
+    let (found, _) = found_on_resume(&protocol, new_run(Some(saved))).await;
+    assert!(found >= downloaded, "found {found} of {downloaded}");
+
+    // And everything still adds up to the right file.
+    let mut last = new_run(Some(TorrentResume {
+        info_hash: String::new(),
+        torrent_bytes: seeder.torrent.clone(),
+        have: None,
+    }));
+    last.ctx.task.spec.speed_limit_bps = None;
+    let path = completed(run(&protocol, last.ctx).await.unwrap());
+    assert_eq!(sha256_file(&path).await.unwrap(), f.sha256);
+    protocol.stop().await;
+}
+
+/// With no torrent running, Persivio must leave the BitTorrent network.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_session_closes_when_idle_and_reopens_when_needed() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = Fixture::random("idle.bin", 200_000, 9);
+    std::fs::create_dir_all(dir.path().join("seed")).unwrap();
+    let src = dir.path().join("seed/idle.bin");
+    std::fs::write(&src, &f.bytes).unwrap();
+    let seeder = seed(&src, "idle.bin").await;
+    let protocol =
+        TorrentProtocol::with_options(Some(dir.path().join("work")), Duration::from_millis(200))
+            .with_initial_peers(vec![seeder.addr]);
+    for dest in ["one", "two"] {
+        assert!(!protocol.is_online().await);
+        let source = Source::TorrentFile {
+            bytes: seeder.torrent.clone(),
+        };
+        let r = run_ctx(source, &dir.path().join(dest), settings(true));
+        let path = completed(run(&protocol, r.ctx).await.unwrap());
+        assert_eq!(sha256_file(&path).await.unwrap(), f.sha256);
+        assert!(protocol.is_online().await, "a quick resume reuses it");
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while protocol.is_online().await {
+            assert!(std::time::Instant::now() < deadline, "never closed");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+}
+
+/// Two tasks for one torrent would write to the same files.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_torrent_that_is_already_running_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = Fixture::random("twice.bin", 4_000_000, 10);
+    std::fs::create_dir_all(dir.path().join("seed")).unwrap();
+    let src = dir.path().join("seed/twice.bin");
+    std::fs::write(&src, &f.bytes).unwrap();
+    let seeder = seed(&src, "twice.bin").await;
+    let protocol = Arc::new(
+        TorrentProtocol::with_work_dir(dir.path().join("work"))
+            .with_initial_peers(vec![seeder.addr]),
+    );
+    let new_run = |dest: &str| {
+        let source = Source::TorrentFile {
+            bytes: seeder.torrent.clone(),
+        };
+        let mut r = run_ctx(source, &dir.path().join(dest), settings(true));
+        r.ctx.task.spec.speed_limit_bps = Some(500_000);
+        r
+    };
+    let first = new_run("one");
+    let (cancel, progress, p) = (
+        first.ctx.cancel.clone(),
+        first.ctx.progress.clone(),
+        protocol.clone(),
+    );
+    let handle = tokio::spawn(async move { p.run(first.ctx).await });
+    while progress.sample().downloaded == 0 {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let err = run(&protocol, new_run("two").ctx).await.unwrap_err();
+    assert!(
+        err.to_string().contains("already being downloaded"),
+        "{err}"
+    );
+    assert!(!handle.is_finished(), "the first one is not affected");
+    cancel.cancel();
+    assert_eq!(handle.await.unwrap().unwrap(), Outcome::Stopped);
+    protocol.stop().await;
 }

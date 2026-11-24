@@ -1,6 +1,20 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Download, Inbox, Pause, Play, Plus, Search, Trash2 } from '@lucide/svelte';
+	import {
+		ArrowDownToLine,
+		ArrowUpToLine,
+		Copy,
+		Download,
+		FolderOpen,
+		Inbox,
+		Info,
+		Pause,
+		Play,
+		Plus,
+		RotateCcw,
+		Search,
+		Trash2
+	} from '@lucide/svelte';
 	import {
 		commands,
 		errorMessage,
@@ -14,15 +28,18 @@
 	import UpdateDialog from '#lib/components/UpdateDialog.svelte';
 	import { loadLastSeen, notesToShow, saveLastSeen } from '#lib/utils/versions.ts';
 	import AddDialog, { type TorrentDraft } from '#lib/components/AddDialog.svelte';
+	import ContextMenu, { type MenuItem } from '#lib/components/ContextMenu.svelte';
 	import DetailDrawer from '#lib/components/DetailDrawer.svelte';
 	import Modal from '#lib/components/Modal.svelte';
 	import SettingsPage from '#lib/components/SettingsPage.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
+	import StatusBar from '#lib/components/StatusBar.svelte';
 	import TaskList from '#lib/components/TaskList.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import { actionFor, isTextField } from '#lib/shortcuts.ts';
 	import { applyFilters, countByFilter, type Filter } from '#lib/stores/filters.ts';
 	import { isActive, type TaskRow } from '#lib/stores/reducer.ts';
+	import { loadSort, saveSort, sortRows, SORTS, type SortKey } from '#lib/stores/sort.ts';
 	import * as sel from '#lib/stores/selection.ts';
 	import { TaskStore } from '#lib/stores/tasks.svelte.ts';
 	import { theme } from '#lib/stores/theme.svelte.ts';
@@ -34,6 +51,8 @@
 	let categories = $state<string[]>([]);
 	let filter = $state<Filter>({ type: 'all' });
 	let search = $state('');
+	let sort = $state<SortKey>(loadSort());
+	let menu = $state<{ x: number; y: number } | null>(null);
 	let selection = $state<sel.Selection>(sel.EMPTY);
 	let detailsOpen = $state(false);
 	let settingsOpen = $state(false);
@@ -60,7 +79,7 @@
 	let list: TaskList | undefined = $state();
 	let searchInput: HTMLInputElement | undefined = $state();
 
-	let visible = $derived(applyFilters(store.tasks, filter, search));
+	let visible = $derived(sortRows(applyFilters(store.tasks, filter, search), sort));
 	let order = $derived(visible.map((r) => r.id));
 	let counts = $derived(countByFilter(store.tasks, categories));
 	let selectedRows = $derived(visible.filter((r) => selection.ids.has(r.id)));
@@ -173,8 +192,66 @@
 		list?.focus();
 	}
 
+	/** Right-click: the menu acts on the selection, which the clicked row joins or becomes. */
+	function onMenu(id: string, e: MouseEvent) {
+		e.preventDefault();
+		if (!selection.ids.has(id)) selection = sel.single(id);
+		menu = { x: e.clientX, y: e.clientY };
+	}
+
+	async function copyLink(text: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			toasts.info('Link copied');
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
+
+	function menuItems(rows: TaskRow[]): MenuItem[] {
+		const [one] = rows;
+		if (!one) return [];
+		const items: MenuItem[] = [];
+		const single = rows.length === 1;
+		if (rows.some(canPause)) {
+			items.push({ label: 'Pause', icon: Pause, run: () => rows.filter(canPause).forEach((r) => store.pause(r.id)) });
+		}
+		if (rows.some(canResume)) {
+			const retry = rows.filter(canResume).every((r) => r.state.type === 'failed');
+			items.push({
+				label: retry ? 'Retry' : 'Resume',
+				icon: retry ? RotateCcw : Play,
+				run: () => rows.filter(canResume).forEach((r) => store.resume(r.id))
+			});
+		}
+		if (single && one.state.type === 'queued') {
+			items.push(
+				{ label: 'Download next', icon: ArrowUpToLine, run: () => store.move(one.id, 'top') },
+				{ label: 'Download last', icon: ArrowDownToLine, run: () => store.move(one.id, 'bottom') }
+			);
+		}
+		if (single) {
+			if (items.length > 0) items.push('separator');
+			items.push({ label: 'Details', icon: Info, run: () => (detailsOpen = true) });
+			if (one.state.type === 'completed' || one.state.type === 'seeding') {
+				items.push({ label: 'Show in folder', icon: FolderOpen, run: () => store.reveal(one.id) });
+			}
+			if (one.source.includes(':')) {
+				items.push({ label: 'Copy link', icon: Copy, run: () => copyLink(one.source) });
+			}
+		}
+		items.push('separator', {
+			label: single ? 'Remove…' : `Remove ${rows.length} downloads…`,
+			icon: Trash2,
+			danger: true,
+			run: () => askRemove(rows.map((r) => r.id))
+		});
+		return items;
+	}
+
 	function onKeydown(e: KeyboardEvent) {
-		const modalOpen = add.open || removing !== null;
+		const modalOpen =
+			add.open || removing !== null || whatsNew !== null || update !== null || menu !== null;
 		if (modalOpen) return; // the <dialog> handles its own keys (Escape closes it)
 		const action = actionFor(e, isTextField(e.target));
 		if (action === null) return;
@@ -280,9 +357,15 @@
 		if (e.relatedTarget === null) dragging = false;
 	}}
 	ondrop={onDrop}
+	oncontextmenu={(e) => {
+		// The webview's own menu (Reload, Save as…) makes no sense in an app; keep it
+		// where text can be edited or copied.
+		const selected = window.getSelection()?.toString() ?? '';
+		if (!isTextField(e.target) && selected === '') e.preventDefault();
+	}}
 />
 
-<div class="flex h-full">
+<div class="flex h-full gap-3 p-3">
 	<Sidebar
 		{filter}
 		{counts}
@@ -295,7 +378,7 @@
 		onsettings={() => (settingsOpen = true)}
 	/>
 
-	<main class="flex min-w-0 flex-1 flex-col">
+	<main class="relative flex min-w-0 flex-1 flex-col">
 		{#if settingsOpen}
 			<SettingsPage
 				onsaved={(s: SettingsView) => (categories = s.categories)}
@@ -303,62 +386,74 @@
 				onshownotes={() => void showWhatsNew(true)}
 			/>
 		{:else}
-			<header class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
+			<header class="glass absolute inset-x-0 top-0 z-20 flex items-center gap-2 rounded-full px-2.5 py-2">
 				<button class="btn-primary" onclick={() => openAdd()} title="New download (Ctrl+N)">
 					<Plus size={14} /> Add
 				</button>
-				<div class="relative ml-1 max-w-72 flex-1">
-					<Search size={14} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
+				<div class="relative ml-1 max-w-72 min-w-24 flex-1">
+					<Search size={14} class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-(--muted)" aria-hidden="true" />
 					<input
 						bind:this={searchInput}
-						class="input py-1 pl-8 text-xs"
+						class="input rounded-full py-1.5 pl-8 text-xs"
 						type="search"
 						placeholder="Search (Ctrl+F)"
 						aria-label="Search downloads"
 						bind:value={search}
 					/>
 				</div>
+				<select
+					class="input w-32 rounded-full py-1.5 text-xs"
+					aria-label="Sort downloads"
+					bind:value={sort}
+					onchange={() => saveSort(sort)}
+				>
+					{#each SORTS as s (s.key)}<option value={s.key}>{s.label}</option>{/each}
+				</select>
 				<div class="ml-auto flex items-center gap-1.5">
 					{#if selectedRows.length > 0}
-						<span class="mr-1 text-xs text-zinc-500" aria-live="polite">{selectedRows.length} selected</span>
-						<button class="btn" disabled={!selectedRows.some(canPause)} onclick={() => selectedRows.filter(canPause).forEach((r) => store.pause(r.id))}>
-							<Pause size={13} /> Pause
+						<span class="mr-1 text-xs whitespace-nowrap text-(--muted)" aria-live="polite">{selectedRows.length} selected</span>
+						<button class="btn" aria-label="Pause" title="Pause" disabled={!selectedRows.some(canPause)} onclick={() => selectedRows.filter(canPause).forEach((r) => store.pause(r.id))}>
+							<Pause size={13} /> <span class="hidden lg:inline">Pause</span>
 						</button>
-						<button class="btn" disabled={!selectedRows.some(canResume)} onclick={() => selectedRows.filter(canResume).forEach((r) => store.resume(r.id))}>
-							<Play size={13} /> Resume
+						<button class="btn" aria-label="Resume" title="Resume" disabled={!selectedRows.some(canResume)} onclick={() => selectedRows.filter(canResume).forEach((r) => store.resume(r.id))}>
+							<Play size={13} /> <span class="hidden lg:inline">Resume</span>
 						</button>
-						<button class="btn" onclick={() => askRemove(selectedRows.map((r) => r.id))}>
-							<Trash2 size={13} /> Remove
+						<button class="btn" aria-label="Remove" title="Remove" onclick={() => askRemove(selectedRows.map((r) => r.id))}>
+							<Trash2 size={13} /> <span class="hidden lg:inline">Remove</span>
 						</button>
 					{:else}
-						<button class="btn" disabled={!anyActive} onclick={() => store.pauseAll()}><Pause size={13} /> Pause all</button>
-						<button class="btn" disabled={!anyPaused} onclick={() => store.resumeAll()}><Play size={13} /> Resume all</button>
+						<button class="btn" aria-label="Pause all" title="Pause all" disabled={!anyActive} onclick={() => store.pauseAll()}>
+							<Pause size={13} /> <span class="hidden lg:inline">Pause all</span>
+						</button>
+						<button class="btn" aria-label="Resume all" title="Resume all" disabled={!anyPaused} onclick={() => store.resumeAll()}>
+							<Play size={13} /> <span class="hidden lg:inline">Resume all</span>
+						</button>
 					{/if}
 				</div>
 			</header>
 
 			{#if store.unavailable}
-				<div role="alert" class="m-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+				<div role="alert" class="mt-16 rounded-2xl bg-red-500/15 p-3 text-sm text-red-800 dark:text-red-200">
 					<p class="font-medium">The download engine is not running.</p>
 					<p>{store.unavailable}</p>
 					<p class="mt-1 text-xs">Close any running <code>persivio</code> command-line session, then restart the app.</p>
 				</div>
 			{/if}
 
-			<div class="flex min-h-0 flex-1">
-				<div class="min-w-0 flex-1">
+			<div class="flex min-h-0 flex-1 gap-3">
+				<div class="relative min-w-0 flex-1">
 					{#if store.loaded && visible.length === 0 && !store.unavailable}
 						<div class="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
 							{#if store.tasks.length === 0}
-								<span class="grid size-12 place-items-center rounded-full bg-teal-600/10 text-teal-600"><Download size={22} /></span>
+								<span class="glass grid size-16 place-items-center rounded-3xl text-teal-700 dark:text-teal-300"><Download size={26} /></span>
 								<p class="text-sm font-medium">No downloads yet</p>
-								<p class="max-w-sm text-xs text-zinc-500">
+								<p class="max-w-sm text-xs text-(--muted)">
 									Paste a link with <span class="kbd">Ctrl+V</span>, drop links or .torrent files here, or click Add.
 								</p>
 								<button class="btn-primary mt-1" onclick={() => openAdd()}><Plus size={14} /> Add a download</button>
 							{:else}
-								<span class="text-zinc-400"><Inbox size={28} /></span>
-								<p class="text-sm text-zinc-500">
+								<span class="text-(--muted)"><Inbox size={28} /></span>
+								<p class="text-sm text-(--muted)">
 									{search.trim() ? `Nothing matches “${search.trim()}”.` : `No downloads in ${filterLabel}.`}
 								</p>
 							{/if}
@@ -369,7 +464,10 @@
 							rows={visible}
 							{selection}
 							label="{filterLabel} downloads"
+							insetTop={60}
+							insetBottom={52}
 							onselect={onSelect}
+							onmenu={onMenu}
 							onopen={(id) => {
 								selection = sel.single(id);
 								detailsOpen = true;
@@ -380,9 +478,16 @@
 							onreveal={(id) => store.reveal(id)}
 						/>
 					{/if}
+					{#if store.tasks.length > 0}
+						<div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
+							<div class="pointer-events-auto"><StatusBar tasks={store.tasks} /></div>
+						</div>
+					{/if}
 				</div>
 				{#if detailsOpen && focusedTask}
-					<DetailDrawer task={focusedTask} {store} onclose={() => (detailsOpen = false)} />
+					<div class="flex pt-[3.75rem]">
+						<DetailDrawer task={focusedTask} {store} onclose={() => (detailsOpen = false)} />
+					</div>
 				{/if}
 			</div>
 		{/if}
@@ -390,9 +495,22 @@
 </div>
 
 {#if dragging}
-	<div class="pointer-events-none fixed inset-3 z-40 grid place-items-center rounded-xl border-2 border-dashed border-teal-500 bg-teal-500/10 text-sm font-medium text-teal-800 dark:text-teal-200">
+	<div class="pointer-events-none fixed inset-3 z-40 grid place-items-center rounded-3xl border-2 border-dashed border-teal-500 bg-teal-500/15 text-sm font-medium text-teal-900 backdrop-blur-sm dark:text-teal-100">
 		Drop links or a .torrent file to add them
 	</div>
+{/if}
+
+{#if menu && selectedRows.length > 0}
+	<ContextMenu
+		x={menu.x}
+		y={menu.y}
+		items={menuItems(selectedRows)}
+		label="Actions for the selected downloads"
+		onclose={() => {
+			menu = null;
+			list?.focus();
+		}}
+	/>
 {/if}
 
 <AddDialog
@@ -413,7 +531,7 @@
 	onclose={() => (removing = null)}
 >
 	{#if removing}
-		<p class="text-sm text-zinc-600 dark:text-zinc-300">
+		<p class="text-sm">
 			{removing.ids.length > 1 ? 'They are' : 'It is'} removed from the list. Unfinished data is always deleted.
 		</p>
 		<label class="mt-3 flex items-center gap-2 text-sm">

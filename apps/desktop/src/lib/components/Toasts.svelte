@@ -3,9 +3,9 @@
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
 
 	const TONES = {
-		info: 'border-zinc-200 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100',
-		warn: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100',
-		error: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100'
+		info: 'text-teal-700 dark:text-teal-300',
+		warn: 'text-amber-700 dark:text-amber-300',
+		error: 'text-red-700 dark:text-red-300'
 	};
 	const ICONS = { info: Info, warn: TriangleAlert, error: CircleAlert };
 </script>
@@ -18,8 +18,8 @@
 >
 	{#each toasts.items as t (t.id)}
 		{@const Icon = ICONS[t.kind]}
-		<div class="pointer-events-auto flex items-start gap-2 rounded-lg border p-3 text-sm shadow-lg {TONES[t.kind]}">
-			<Icon size={16} class="mt-0.5 shrink-0" aria-hidden="true" />
+		<div class="glass glass-strong enter-up pointer-events-auto flex items-start gap-2.5 rounded-2xl p-3 text-sm">
+			<Icon size={16} class="mt-0.5 shrink-0 {TONES[t.kind]}" aria-hidden="true" />
 			<p class="flex-1 break-words">{t.message}</p>
 			{#if t.action}
 				<button

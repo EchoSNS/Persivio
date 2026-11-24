@@ -32,7 +32,7 @@
 			Persivio <strong>{update.version}</strong> is available (you have {update.currentVersion}).
 		</p>
 		{#if update.notes}
-			<pre class="mt-3 max-h-60 overflow-y-auto rounded-md bg-zinc-100 p-3 text-xs whitespace-pre-wrap dark:bg-zinc-800">{update.notes}</pre>
+			<pre class="mt-3 max-h-60 overflow-y-auto rounded-xl border border-(--line) bg-(--field) p-3 text-xs whitespace-pre-wrap">{update.notes}</pre>
 		{/if}
 		<p class="hint mt-3">
 			Installing stops running downloads safely; they continue after the restart.

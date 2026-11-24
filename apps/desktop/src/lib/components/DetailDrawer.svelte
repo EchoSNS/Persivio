@@ -9,6 +9,7 @@
 	import SegmentBar from './SegmentBar.svelte';
 	import Sparkline from './Sparkline.svelte';
 	import StateBadge from './StateBadge.svelte';
+	import { CHECKING_HINT } from './TaskRow.svelte';
 
 	type Props = { task: TaskRow; store: TaskStore; onclose: () => void };
 	let { task, store, onclose }: Props = $props();
@@ -19,7 +20,9 @@
 	let selectionDirty = $state(false);
 
 	let active = $derived(isActive(task.state));
+	let checking = $derived(task.state.type === 'checking');
 	let pct = $derived(percent(task.downloaded, task.total));
+	let finished = $derived(task.state.type === 'completed' || task.state.type === 'seeding');
 	let waiting = $derived(task.state.type === 'queued' || task.state.type === 'paused');
 
 	async function load(id: string) {
@@ -68,10 +71,10 @@
 </script>
 
 <aside
-	class="flex h-full w-[22rem] shrink-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+	class="glass enter-up flex w-[21rem] shrink-0 flex-col overflow-hidden rounded-3xl"
 	aria-label="Download details"
 >
-	<header class="flex items-start gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+	<header class="flex items-start gap-2 border-b border-(--line) px-4 py-3">
 		<div class="min-w-0 flex-1">
 			<h2 class="text-sm font-semibold break-words">{task.name}</h2>
 			<div class="mt-1 flex items-center gap-2"><StateBadge state={task.state} /></div>
@@ -81,13 +84,13 @@
 
 	<div class="flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">
 		{#if task.state.type === 'failed'}
-			<p class="rounded-md bg-red-50 p-2.5 text-xs text-red-800 dark:bg-red-950 dark:text-red-200">
+			<p class="rounded-xl bg-red-500/15 p-2.5 text-xs text-red-800 dark:text-red-200">
 				{task.state.message}
 			</p>
 		{/if}
 
 		<section aria-label="Progress" class="space-y-2">
-			<div class="flex justify-between text-xs text-zinc-500 tabular-nums">
+			<div class="flex justify-between text-xs text-(--muted) tabular-nums">
 				<span>
 					{formatBytes(task.downloaded)}{task.total === null ? '' : ` of ${formatBytes(task.total)}`}
 				</span>
@@ -95,21 +98,26 @@
 			</div>
 			{#if detail && detail.segments.length > 0 && task.total}
 				<SegmentBar segments={detail.segments} total={task.total} />
-				<p class="text-[11px] text-zinc-500">{detail.segments.length} segments</p>
+				<p class="text-[11px] text-(--muted)">{detail.segments.length} segments</p>
 			{/if}
-			{#if active}
+			{#if checking}
+				<div class="rounded-xl bg-sky-500/15 p-2.5 text-xs text-sky-900 dark:text-sky-100">
+					<p class="font-medium">Checking files{task.checkPercent === null ? '…' : ': ' + task.checkPercent + '%'}</p>
+					<p class="mt-0.5">{CHECKING_HINT}</p>
+				</div>
+			{:else if active}
 				<dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-					<dt class="text-zinc-500">Speed</dt>
+					<dt class="text-(--muted)">Speed</dt>
 					<dd class="text-right tabular-nums">{formatSpeed(task.speedBps)}</dd>
-					<dt class="text-zinc-500">Time left</dt>
+					<dt class="text-(--muted)">Time left</dt>
 					<dd class="text-right tabular-nums">{formatEta(task.etaSecs)}</dd>
 					{#if task.peers !== null}
-						<dt class="text-zinc-500">Peers</dt>
+						<dt class="text-(--muted)">Peers</dt>
 						<dd class="text-right tabular-nums">{task.peers}</dd>
-						<dt class="text-zinc-500">Upload</dt>
+						<dt class="text-(--muted)">Upload</dt>
 						<dd class="text-right tabular-nums">{formatSpeed(task.uploadBps ?? 0)}</dd>
 					{:else}
-						<dt class="text-zinc-500">Connections</dt>
+						<dt class="text-(--muted)">Connections</dt>
 						<dd class="text-right tabular-nums">{task.connections}</dd>
 					{/if}
 				</dl>
@@ -119,7 +127,7 @@
 
 		{#if detail && task.kind === 'torrent' && detail.files.length > 0}
 			<section aria-label="Files" class="space-y-2">
-				<h3 class="text-xs font-semibold text-zinc-500 uppercase">Files</h3>
+				<h3 class="text-xs font-semibold text-(--muted) uppercase">Files</h3>
 				<FileSelector
 					files={detail.files}
 					selected={selection}
@@ -139,44 +147,44 @@
 		<section aria-label="Information">
 			<dl class="space-y-2 text-xs">
 				<div>
-					<dt class="text-zinc-500">Source</dt>
+					<dt class="text-(--muted)">Source</dt>
 					<dd class="break-all select-text">{task.source}</dd>
 				</div>
 				{#if detail?.finalUrl && detail.finalUrl !== task.source}
 					<div>
-						<dt class="text-zinc-500">Final URL</dt>
+						<dt class="text-(--muted)">Final URL</dt>
 						<dd class="break-all select-text">{detail.finalUrl}</dd>
 					</div>
 				{/if}
 				<div>
-					<dt class="text-zinc-500">Saved to</dt>
+					<dt class="text-(--muted)">Saved to</dt>
 					<dd class="break-all select-text">{detail?.path ?? task.destDir}</dd>
 				</div>
 				{#if detail?.checksum}
 					<div>
-						<dt class="text-zinc-500">Expected checksum</dt>
+						<dt class="text-(--muted)">Expected checksum</dt>
 						<dd class="font-mono break-all select-text">{detail.checksum}</dd>
 					</div>
 				{/if}
 				{#if detail?.sendsCredentials}
-					<div class="flex items-center gap-1.5 text-zinc-500">
+					<div class="flex items-center gap-1.5 text-(--muted)">
 						<KeyRound size={12} aria-hidden="true" /> Sent with cookies or custom headers
 					</div>
 				{/if}
 				{#if detail?.connections || detail?.speedLimitBps}
 					<div class="flex gap-4">
-						{#if detail.connections}<span><span class="text-zinc-500">Connections</span> {detail.connections}</span>{/if}
-						{#if detail.speedLimitBps}<span><span class="text-zinc-500">Limit</span> {formatSpeed(detail.speedLimitBps)}</span>{/if}
+						{#if detail.connections}<span><span class="text-(--muted)">Connections</span> {detail.connections}</span>{/if}
+						{#if detail.speedLimitBps}<span><span class="text-(--muted)">Limit</span> {formatSpeed(detail.speedLimitBps)}</span>{/if}
 					</div>
 				{/if}
 				<div class="flex gap-4">
-					<span><span class="text-zinc-500">Added</span> {date(task.createdAt)}</span>
+					<span><span class="text-(--muted)">Added</span> {date(task.createdAt)}</span>
 				</div>
 				{#if task.completedAt}
-					<div><span class="text-zinc-500">Completed</span> {date(task.completedAt)}</div>
+					<div><span class="text-(--muted)">Completed</span> {date(task.completedAt)}</div>
 				{/if}
 				{#if task.category}
-					<div><span class="text-zinc-500">Category</span> {task.category}</div>
+					<div><span class="text-(--muted)">Category</span> {task.category}</div>
 				{/if}
 			</dl>
 		</section>
@@ -186,17 +194,19 @@
 		{/if}
 	</div>
 
-	<footer class="flex flex-wrap gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-		{#if task.state.type === 'completed' || task.state.type === 'seeding'}
-			<button class="btn" onclick={() => store.reveal(task.id)}><FolderOpen size={14} /> Show in folder</button>
-		{/if}
-		{#if waiting}
-			<button class="btn" onclick={() => store.move(task.id, 'up')} aria-label="Move up in the queue">
-				<ArrowUp size={14} /> Up
-			</button>
-			<button class="btn" onclick={() => store.move(task.id, 'down')} aria-label="Move down in the queue">
-				<ArrowDown size={14} /> Down
-			</button>
-		{/if}
-	</footer>
+	{#if waiting || finished}
+		<footer class="flex flex-wrap gap-2 border-t border-(--line) px-4 py-3">
+			{#if finished}
+				<button class="btn" onclick={() => store.reveal(task.id)}><FolderOpen size={14} /> Show in folder</button>
+			{/if}
+			{#if waiting}
+				<button class="btn" onclick={() => store.move(task.id, 'up')} aria-label="Move up in the queue">
+					<ArrowUp size={14} /> Up
+				</button>
+				<button class="btn" onclick={() => store.move(task.id, 'down')} aria-label="Move down in the queue">
+					<ArrowDown size={14} /> Down
+				</button>
+			{/if}
+		</footer>
+	{/if}
 </aside>

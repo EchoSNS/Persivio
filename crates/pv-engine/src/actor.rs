@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use pv_core::{
     EngineEvent, FailReason, Outcome, Progress, ProgressSink, Protocol, ProtocolError,
     ResolvedMetadata, ResumeState, RunContext, RunEvents, RunPhase, Settings, SpeedMeter, TaskId,
-    TaskKind, TaskSnapshot, TaskState, TaskStateKind, TorrentResume, UnixMillis, transition,
+    TaskKind, TaskSnapshot, TaskState, TaskStateKind, UnixMillis, transition,
 };
 use pv_http::filename::{contained_path, part_name};
 use pv_store::Store;
@@ -355,14 +355,7 @@ impl Actor {
             resume: ResumeState {
                 http: (stored.http != pv_core::HttpResumeInfo::default()).then_some(stored.http),
                 segments: stored.segments,
-                torrent: self
-                    .store
-                    .torrent_state(id)
-                    .await?
-                    .map(|(info_hash, torrent_bytes)| TorrentResume {
-                        info_hash,
-                        torrent_bytes,
-                    }),
+                torrent: self.store.torrent_state(id).await?,
             },
             settings: self.settings.clone(),
             cancel: cancel.clone(),
@@ -540,6 +533,9 @@ impl Actor {
         settings.validate()?;
         self.store.save_settings(&settings).await?;
         self.global.set(settings.global_speed_limit_bps);
+        for protocol in &self.protocols {
+            protocol.settings_changed(&settings);
+        }
         self.settings = Arc::new(settings);
         self.schedule().await;
         Ok(())
@@ -686,9 +682,11 @@ impl Actor {
         for (id, running) in &mut self.running {
             let now = Instant::now();
             let sample = running.progress.sample();
-            let speed = running
-                .meter
-                .sample(sample.downloaded, now - running.last_sample);
+            let speed = running.meter.sample_rebased(
+                sample.downloaded,
+                sample.rebases,
+                now - running.last_sample,
+            );
             running.last_sample = now;
             batch.push(sample.to_progress(*id, speed));
             if let Some(task) = self.tasks.get_mut(id) {

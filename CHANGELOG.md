@@ -6,6 +6,30 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
+## [0.3.0] - 2026-11-24
+
+### Added
+- New glass look for light and dark: translucent surfaces that the list scrolls under.
+  Settings → Appearance has a switch for solid surfaces.
+- Right-click menu on downloads, sorting, and a bar with the total speeds.
+- "Checking files" state for torrents, with its own progress.
+
+### Changed
+- Resuming a paused torrent continues at once instead of reading all its data again.
+  After a crash, or if the files changed, it is still checked completely.
+- With no torrent running, Persivio leaves the BitTorrent network after 30 seconds: no
+  open port and no background traffic.
+- The global speed limit now also applies to torrents that are already running.
+- Downloads are listed newest first; the Save button in Settings stays visible.
+
+### Fixed
+- A resumed torrent looked as if it downloaded very fast and then started over. The fast
+  part was the check of existing data.
+- Torrents showed 0% after a restart until they ran again.
+- With the details panel open, file names could disappear from the list.
+- Adding a torrent that is already running is refused instead of both using the same
+  files.
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

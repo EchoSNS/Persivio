@@ -50,6 +50,8 @@ pub enum TaskStateView {
     Probing,
     /// Torrent: getting metadata from peers.
     FetchingMetadata,
+    /// Torrent: re-checking the data already on disk.
+    Checking,
     /// Transferring data.
     Downloading,
     /// Stopped by the user; can be resumed.
@@ -77,6 +79,7 @@ impl From<&TaskState> for TaskStateView {
             TaskState::Queued => Self::Queued,
             TaskState::Probing => Self::Probing,
             TaskState::FetchingMetadata => Self::FetchingMetadata,
+            TaskState::Checking => Self::Checking,
             TaskState::Downloading => Self::Downloading,
             TaskState::Paused => Self::Paused,
             TaskState::Verifying => Self::Verifying,
@@ -207,6 +210,8 @@ pub struct ProgressView {
     pub peers: Option<u32>,
     /// Torrent: upload speed, bytes/second.
     pub upload_bps: Option<u64>,
+    /// While existing data is re-checked: percent done.
+    pub check_percent: Option<u8>,
 }
 
 impl From<&Progress> for ProgressView {
@@ -220,6 +225,7 @@ impl From<&Progress> for ProgressView {
             connections: p.connections_active,
             peers: p.peers,
             upload_bps: p.upload_bps,
+            check_percent: p.check_percent,
         }
     }
 }

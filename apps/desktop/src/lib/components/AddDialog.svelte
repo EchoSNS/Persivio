@@ -184,6 +184,7 @@
 			<label class="label" for="add-links">Links (one per line)</label>
 			<textarea
 				id="add-links"
+				data-autofocus
 				class="input min-h-24 font-mono text-xs"
 				placeholder="https://example.com/file.iso&#10;magnet:?xt=urn:btih:..."
 				spellcheck="false"
@@ -193,10 +194,10 @@
 				<ul class="mt-2 flex flex-wrap gap-1.5" aria-label="Detected links">
 					{#each links.slice(0, 50) as l (l.link)}
 						<li
-							class="inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 text-[11px]
+							class="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px]
 								{l.kind === 'invalid'
-								? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-								: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'}"
+								? 'bg-red-500/15 text-red-800 dark:text-red-200'
+								: 'border border-(--line) bg-(--control)'}"
 							title={l.link}
 						>
 							{#if l.kind === 'magnet'}<Magnet size={11} />{:else if l.kind === 'http'}<Globe size={11} />{:else}<TriangleAlert size={11} />{/if}
@@ -218,7 +219,7 @@
 				<div class="panel space-y-2 p-3">
 					<div class="flex items-center justify-between gap-2 text-sm">
 						<span class="truncate font-medium">{torrent.info.name}</span>
-						<span class="text-xs text-zinc-500">{formatBytes(torrent.info.totalSize)}</span>
+						<span class="text-xs text-(--muted)">{formatBytes(torrent.info.totalSize)}</span>
 					</div>
 					<FileSelector
 						files={torrent.info.files}
@@ -290,11 +291,11 @@
 			</div>
 		</div>
 
-		<details class="rounded-md border border-zinc-200 dark:border-zinc-800">
+		<details class="rounded-2xl border border-(--line)">
 			<summary class="cursor-pointer px-3 py-2 text-xs font-medium select-none">
 				Advanced (HTTP): headers, cookies, referer, checksum
 			</summary>
-			<div class="space-y-3 border-t border-zinc-200 p-3 dark:border-zinc-800">
+			<div class="space-y-3 border-t border-(--line) p-3">
 				{#if !hasHttp}
 					<p class="hint">These options apply to http(s) links only.</p>
 				{/if}

@@ -4552,7 +4552,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "persivio-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4570,7 +4570,7 @@ dependencies = [
 
 [[package]]
 name = "persivio-desktop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4914,7 +4914,7 @@ dependencies = [
 
 [[package]]
 name = "pv-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -4928,7 +4928,7 @@ dependencies = [
 
 [[package]]
 name = "pv-engine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "directories",
@@ -4948,7 +4948,7 @@ dependencies = [
 
 [[package]]
 name = "pv-http"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4971,7 +4971,7 @@ dependencies = [
 
 [[package]]
 name = "pv-store"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "pv-core",
@@ -4986,7 +4986,7 @@ dependencies = [
 
 [[package]]
 name = "pv-testkit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "bytes",
@@ -5001,13 +5001,15 @@ dependencies = [
 
 [[package]]
 name = "pv-torrent"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "librqbit",
  "pv-core",
  "pv-testkit",
  "pv-torrent",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-util",

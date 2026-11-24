@@ -130,6 +130,7 @@ async fn every_state_round_trips() {
             TaskStateKind::Queued => TaskState::Queued,
             TaskStateKind::Probing => TaskState::Probing,
             TaskStateKind::FetchingMetadata => TaskState::FetchingMetadata,
+            TaskStateKind::Checking => TaskState::Checking,
             TaskStateKind::Downloading => TaskState::Downloading,
             TaskStateKind::Paused => TaskState::Paused,
             TaskStateKind::Verifying => TaskState::Verifying,
@@ -588,9 +589,38 @@ async fn torrent_state_and_file_selection_round_trip() {
         .save_torrent_state(task.id, "bb", b"v2")
         .await
         .unwrap();
+    let saved = store.torrent_state(task.id).await.unwrap().unwrap();
     assert_eq!(
-        store.torrent_state(task.id).await.unwrap(),
-        Some(("bb".into(), b"v2".to_vec()))
+        (saved.info_hash.as_str(), saved.torrent_bytes.as_slice()),
+        ("bb", b"v2".as_slice())
+    );
+    assert_eq!(saved.have, None);
+
+    sink.save_torrent_progress(task.id, 1234, Some(b"map"))
+        .await
+        .unwrap();
+    let saved = store.torrent_state(task.id).await.unwrap().unwrap();
+    assert_eq!(saved.have.as_deref(), Some(b"map".as_slice()));
+    store
+        .save_torrent_state(task.id, "bb", b"v3")
+        .await
+        .unwrap();
+    let saved = store.torrent_state(task.id).await.unwrap().unwrap();
+    assert_eq!(
+        saved.have.as_deref(),
+        Some(b"map".as_slice()),
+        "saving metadata again keeps the progress record"
+    );
+    let loaded = store.load_all().await.unwrap().remove(0);
+    assert_eq!(
+        loaded.snapshot.downloaded, 1234,
+        "shown before the torrent runs again"
+    );
+    assert!(
+        store
+            .update_torrent_progress(TaskId::new(), 1, None)
+            .await
+            .is_err()
     );
     assert!(
         store

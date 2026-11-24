@@ -11,12 +11,15 @@ export type TaskRow = TaskView & {
 	connections: number;
 	peers: number | null;
 	uploadBps: number | null;
+	/** While existing data is re-checked: percent done. */
+	checkPercent: number | null;
 };
 
 /** States in which a task transfers data and receives progress. */
 const ACTIVE: ReadonlySet<TaskStateView['type']> = new Set([
 	'probing',
 	'fetching_metadata',
+	'checking',
 	'downloading',
 	'verifying',
 	'seeding'
@@ -27,7 +30,15 @@ export function isActive(state: TaskStateView): boolean {
 }
 
 export function toRow(task: TaskView): TaskRow {
-	return { ...task, speedBps: 0, etaSecs: null, connections: 0, peers: null, uploadBps: null };
+	return {
+		...task,
+		speedBps: 0,
+		etaSecs: null,
+		connections: 0,
+		peers: null,
+		uploadBps: null,
+		checkPercent: null
+	};
 }
 
 /** Replaces the list with a fresh one from `listTasks`. */
@@ -56,6 +67,7 @@ export function applyEvent(rows: TaskRow[], event: EngineUiEvent): EventResult {
 						next.connections = 0;
 						next.uploadBps = null;
 					}
+					if (event.state.type !== 'checking') next.checkPercent = null;
 					if (event.state.type === 'completed') {
 						if (row.total !== null) next.downloaded = row.total;
 						next.completedAt ??= Date.now();
@@ -93,7 +105,8 @@ export function applyProgress(rows: TaskRow[], batch: ProgressView[]): TaskRow[]
 			etaSecs: p.etaSecs,
 			connections: p.connections,
 			peers: p.peers,
-			uploadBps: p.uploadBps
+			uploadBps: p.uploadBps,
+			checkPercent: p.checkPercent
 		};
 	});
 	return changed ? next : rows;

@@ -22,10 +22,10 @@
 			<path d="{path} L{W} {H} L0 {H} Z" class="fill-teal-500/15" />
 			<path d={path} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" />
 		{:else}
-			<line x1="0" y1={H - 1} x2={W} y2={H - 1} class="stroke-zinc-300 dark:stroke-zinc-700" />
+			<line x1="0" y1={H - 1} x2={W} y2={H - 1} class="stroke-(--track)" />
 		{/if}
 	</svg>
-	<figcaption class="mt-1 flex justify-between text-[10px] text-zinc-500">
+	<figcaption class="mt-1 flex justify-between text-[10px] text-(--muted)">
 		<span>last {Math.round(samples.length / 4)} s</span>
 		<span>peak {formatSpeed(peak)}</span>
 	</figcaption>

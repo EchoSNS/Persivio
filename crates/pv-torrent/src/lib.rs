@@ -4,39 +4,45 @@
 //! **Boundary:** this is the only crate allowed to depend on `librqbit`, and no
 //! librqbit type appears in its public API. See ADR-016 for how librqbit's model is
 //! mapped onto Persivio's (shared session, list-only metadata step, path validation,
-//! seeding limits, no librqbit persistence).
+//! seeding limits), and ADR-023 for resuming without a full re-check.
 
+mod have;
 mod motw;
 mod paths;
 mod seeding;
+mod session;
 #[cfg(feature = "testing")]
 pub mod testing;
 
 use std::collections::HashSet;
-use std::net::{Ipv4Addr, SocketAddr};
-use std::num::NonZeroU32;
-use std::path::Path;
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use librqbit::api::TorrentIdOrHash;
+use librqbit::api::{Api, TorrentIdOrHash};
 use librqbit::limits::LimitsConfig;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, DhtSessionConfig, ListenerMode,
-    ListenerOptions, Magnet, Session, SessionOptions, TorrentStatsState,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ListOnlyResponse, Magnet, Session,
+    TorrentStatsState,
 };
 use pv_core::{
     FileEntry, Outcome, Protocol, ProtocolError, ResolvedMetadata, RunContext, RunPhase, Settings,
     Source,
 };
-use tokio::sync::OnceCell;
+
+use have::HaveMap;
+use session::SharedSession;
 
 pub use paths::validate_torrent_path;
 pub use seeding::seeding_done;
 
 /// How often torrent stats are copied into the task's progress counters.
 const POLL: Duration = Duration::from_millis(250);
+
+/// The same while existing data is being checked, so a fast check ends promptly.
+const CHECK_POLL: Duration = Duration::from_millis(50);
 
 /// Parsed facts about a magnet link.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,18 +73,44 @@ pub fn parse_magnet(uri: &str) -> Result<MagnetInfo, ProtocolError> {
 
 /// Downloads `Source::Magnet` and `Source::TorrentFile` tasks through one shared
 /// librqbit session (one listening port, one DHT node for the whole app).
-#[derive(Default)]
 pub struct TorrentProtocol {
-    session: OnceCell<Arc<Session>>,
+    session: Arc<SharedSession>,
     /// Peers to contact directly, in addition to trackers/DHT (LAN use and tests).
     initial_peers: Vec<SocketAddr>,
 }
 
+impl Default for TorrentProtocol {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TorrentProtocol {
-    /// A protocol whose session is created on first use from the app settings.
+    /// A protocol whose session is created on first use from the app settings. Without
+    /// a [work directory](Self::with_work_dir) every resume re-checks all data.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            session: Arc::new(SharedSession::new(None, session::DEFAULT_IDLE)),
+            initial_peers: Vec::new(),
+        }
+    }
+
+    /// Enables fast resume. `dir` must be used by nothing else: it is **emptied** each
+    /// time the session starts.
+    #[must_use]
+    pub fn with_work_dir(dir: impl Into<PathBuf>) -> Self {
+        Self::with_options(Some(dir.into()), session::DEFAULT_IDLE)
+    }
+
+    /// [`with_work_dir`](Self::with_work_dir) with a custom idle time before the session
+    /// closes.
+    #[must_use]
+    pub fn with_options(work_dir: Option<PathBuf>, idle: Duration) -> Self {
+        Self {
+            session: Arc::new(SharedSession::new(work_dir, idle)),
+            initial_peers: Vec::new(),
+        }
     }
 
     /// Also connects to these peers for every torrent (local seeding, tests).
@@ -88,67 +120,14 @@ impl TorrentProtocol {
         self
     }
 
-    /// The shared session. Settings that only apply at creation (port, DHT, `UPnP`,
-    /// extra trackers, global limit) are read from the first task's settings.
-    async fn session(
-        &self,
-        settings: &Settings,
-        dest: &Path,
-    ) -> Result<&Arc<Session>, ProtocolError> {
-        self.session
-            .get_or_try_init(|| async {
-                let t = &settings.torrent;
-                let trackers = if t.use_extra_trackers {
-                    t.extra_trackers
-                        .iter()
-                        .filter_map(|u| u.parse().ok())
-                        .collect()
-                } else {
-                    HashSet::new()
-                };
-                let opts = SessionOptions {
-                    // DHT off = `None` (tests and privacy-conscious users). No DHT cache
-                    // file: librqbit would write it outside Persivio's folders (ADR-016).
-                    dht: t.dht.then(|| DhtSessionConfig {
-                        persistence: None,
-                        ..DhtSessionConfig::default()
-                    }),
-                    // Persivio's database is the source of truth (ADR-012, ADR-016).
-                    persistence: None,
-                    fastresume: false,
-                    listen: Some(ListenerOptions {
-                        mode: ListenerMode::TcpOnly,
-                        listen_addr: SocketAddr::from((
-                            Ipv4Addr::UNSPECIFIED,
-                            t.listen_port.unwrap_or(0),
-                        )),
-                        enable_upnp_port_forwarding: t.upnp,
-                        ..ListenerOptions::default()
-                    }),
-                    trackers,
-                    ratelimits: LimitsConfig {
-                        download_bps: settings
-                            .global_speed_limit_bps
-                            .and_then(|b| NonZeroU32::new(u32::try_from(b).unwrap_or(u32::MAX))),
-                        upload_bps: None,
-                    },
-                    disable_local_service_discovery: !t.dht,
-                    ..SessionOptions::default()
-                };
-                Session::new_with_opts(dest.to_path_buf(), opts)
-                    .await
-                    .map_err(|e| {
-                        ProtocolError::Torrent(format!("cannot start BitTorrent session: {e:#}"))
-                    })
-            })
-            .await
-    }
-
     /// Stops the session (app shutdown).
     pub async fn stop(&self) {
-        if let Some(s) = self.session.get() {
-            s.stop().await;
-        }
+        self.session.stop().await;
+    }
+
+    /// Whether the BitTorrent session (listening port, DHT) is currently open.
+    pub async fn is_online(&self) -> bool {
+        self.session.is_open().await
     }
 }
 
@@ -173,37 +152,35 @@ impl Protocol for TorrentProtocol {
         self.stop().await;
     }
 
+    fn settings_changed(&self, settings: &Settings) {
+        let (session, limit) = (self.session.clone(), settings.global_speed_limit_bps);
+        tokio::spawn(async move { session.set_download_limit(limit).await });
+    }
+
     async fn run(&self, ctx: RunContext) -> Result<Outcome, ProtocolError> {
+        tokio::fs::create_dir_all(&ctx.task.spec.dest_dir).await?;
+        let session = self
+            .session
+            .acquire(&ctx.settings, &ctx.task.spec.dest_dir)
+            .await?;
+        let result = self.run_in(&ctx, &session).await;
+        drop(session);
+        self.session.release().await;
+        result
+    }
+}
+
+impl TorrentProtocol {
+    async fn run_in(
+        &self,
+        ctx: &RunContext,
+        session: &Arc<Session>,
+    ) -> Result<Outcome, ProtocolError> {
         let dest = ctx.task.spec.dest_dir.clone();
-        tokio::fs::create_dir_all(&dest).await?;
-        let session = self.session(&ctx.settings, &dest).await?;
-        let initial_peers = (!self.initial_peers.is_empty()).then(|| self.initial_peers.clone());
 
         // 1) Metadata only: file list + .torrent bytes, nothing written yet.
-        let add = match (&ctx.resume.torrent, &ctx.task.spec.source) {
-            (Some(saved), _) => AddTorrent::from_bytes(saved.torrent_bytes.clone()),
-            (None, Source::Magnet { uri }) => {
-                ctx.events.phase(RunPhase::FetchingMetadata);
-                AddTorrent::from_url(uri.clone())
-            }
-            (None, Source::TorrentFile { bytes }) => AddTorrent::from_bytes(bytes.clone()),
-            (None, Source::Http { .. }) => {
-                return Err(ProtocolError::InvalidSource("not a torrent".to_owned()));
-            }
-        };
-        let list_opts = AddTorrentOptions {
-            list_only: true,
-            initial_peers: initial_peers.clone(),
-            output_folder: Some(dest.to_string_lossy().into_owned()),
-            ..AddTorrentOptions::default()
-        };
-        let listed = tokio::select! {
-            biased;
-            () = ctx.cancel.cancelled() => return Ok(Outcome::Stopped),
-            r = session.add_torrent(add, Some(list_opts)) => r.map_err(|e| torrent_err(format!("{e:#}")))?,
-        };
-        let AddTorrentResponse::ListOnly(listed) = listed else {
-            return Err(torrent_err("unexpected response to a metadata request"));
+        let Some(listed) = self.list(ctx, session).await? else {
+            return Ok(Outcome::Stopped);
         };
 
         // 2) Validate every path before anything touches the disk.
@@ -249,17 +226,21 @@ impl Protocol for TorrentProtocol {
                 .filter_map(|i| usize::try_from(i).ok())
                 .collect()
         });
+        let paths: Vec<PathBuf> = layout
+            .files
+            .iter()
+            .map(|(rel, _)| layout.output_folder.join(rel))
+            .collect();
+        let resuming = ctx.resume.torrent.is_some();
+        self.prepare_fast_resume(ctx, &info_hash, &paths).await;
         let opts = AddTorrentOptions {
+            preferred_id: Some(self.session.next_id()),
             overwrite: true, // reuse (and re-check) existing pieces on resume
             output_folder: Some(layout.output_folder.to_string_lossy().into_owned()),
             only_files,
-            initial_peers,
+            initial_peers: self.peers(),
             ratelimits: LimitsConfig {
-                download_bps: ctx
-                    .task
-                    .spec
-                    .speed_limit_bps
-                    .and_then(|b| NonZeroU32::new(u32::try_from(b).unwrap_or(u32::MAX))),
+                download_bps: session::limit(ctx.task.spec.speed_limit_bps),
                 upload_bps: None,
             },
             ..AddTorrentOptions::default()
@@ -272,80 +253,252 @@ impl Protocol for TorrentProtocol {
             .await
             .map_err(|e| torrent_err(format!("{e:#}")))?;
         let (id, handle) = match response {
-            AddTorrentResponse::Added(id, h) | AddTorrentResponse::AlreadyManaged(id, h) => (id, h),
+            AddTorrentResponse::Added(id, h) => (id, h),
+            // Two tasks for one torrent would fight over the same files.
+            AddTorrentResponse::AlreadyManaged(..) => {
+                return Err(torrent_err("this torrent is already being downloaded"));
+            }
             AddTorrentResponse::ListOnly(_) => return Err(torrent_err("torrent was not added")),
         };
-        ctx.events.phase(RunPhase::Downloading);
         ctx.progress.set_total(Some(total));
+        // A first run has nothing to check, so the (instant) check is not worth showing.
+        ctx.events.phase(if resuming {
+            RunPhase::Checking
+        } else {
+            RunPhase::Downloading
+        });
+        Active {
+            ctx,
+            session,
+            id,
+            handle: &handle,
+            total,
+            paths,
+            root_path: layout.root_path,
+        }
+        .follow(resuming)
+        .await
+    }
 
-        follow(&ctx, session, id, &handle, total, layout.root_path).await
+    fn peers(&self) -> Option<Vec<SocketAddr>> {
+        (!self.initial_peers.is_empty()).then(|| self.initial_peers.clone())
+    }
+
+    /// Resolves the torrent's metadata without starting it. `None`: cancelled.
+    async fn list(
+        &self,
+        ctx: &RunContext,
+        session: &Arc<Session>,
+    ) -> Result<Option<ListOnlyResponse>, ProtocolError> {
+        let add = match (&ctx.resume.torrent, &ctx.task.spec.source) {
+            (Some(saved), _) => AddTorrent::from_bytes(saved.torrent_bytes.clone()),
+            (None, Source::Magnet { uri }) => {
+                ctx.events.phase(RunPhase::FetchingMetadata);
+                AddTorrent::from_url(uri.clone())
+            }
+            (None, Source::TorrentFile { bytes }) => AddTorrent::from_bytes(bytes.clone()),
+            (None, Source::Http { .. }) => {
+                return Err(ProtocolError::InvalidSource("not a torrent".to_owned()));
+            }
+        };
+        let list_opts = AddTorrentOptions {
+            list_only: true,
+            initial_peers: self.peers(),
+            output_folder: Some(ctx.task.spec.dest_dir.to_string_lossy().into_owned()),
+            ..AddTorrentOptions::default()
+        };
+        let listed = tokio::select! {
+            biased;
+            () = ctx.cancel.cancelled() => return Ok(None),
+            r = session.add_torrent(add, Some(list_opts)) => r.map_err(|e| torrent_err(format!("{e:#}")))?,
+        };
+        match listed {
+            AddTorrentResponse::ListOnly(listed) => Ok(Some(listed)),
+            _ => Err(torrent_err("unexpected response to a metadata request")),
+        }
+    }
+
+    /// Hands librqbit the saved piece map, if the files it describes are unchanged.
+    /// Any problem only means a full check.
+    async fn prepare_fast_resume(&self, ctx: &RunContext, info_hash: &str, paths: &[PathBuf]) {
+        let Some(target) = self.session.bitfield_path(info_hash) else {
+            return;
+        };
+        let saved = ctx
+            .resume
+            .torrent
+            .as_ref()
+            .and_then(|t| t.have.as_deref())
+            .and_then(HaveMap::from_bytes);
+        let bits = match saved {
+            Some(map) => {
+                let paths = paths.to_vec();
+                tokio::task::spawn_blocking(move || map.validated_bits(&paths))
+                    .await
+                    .ok()
+                    .flatten()
+            }
+            None => None,
+        };
+        let result = match bits {
+            Some(bits) => tokio::fs::write(&target, bits).await,
+            None => match tokio::fs::remove_file(&target).await {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                r => r,
+            },
+        };
+        if let Err(e) = result {
+            tracing::warn!(%e, "fast resume is not available for this run");
+        }
     }
 }
 
-/// Mirrors torrent stats into the task's progress until it finishes (and, if seeding
-/// is enabled, until a seeding limit is reached), or the task is cancelled.
-async fn follow(
-    ctx: &RunContext,
-    session: &Arc<Session>,
+/// One torrent in the session.
+struct Active<'a> {
+    ctx: &'a RunContext,
+    session: &'a Arc<Session>,
     id: usize,
-    handle: &librqbit::ManagedTorrent,
+    handle: &'a Arc<librqbit::ManagedTorrent>,
+    /// Bytes of the selected files.
     total: u64,
-    root_path: std::path::PathBuf,
-) -> Result<Outcome, ProtocolError> {
-    let mut seeding_since: Option<Instant> = None;
-    loop {
-        tokio::select! {
-            biased;
-            () = ctx.cancel.cancelled() => {
-                detach(session, id).await;
-                return Ok(Outcome::Stopped);
+    /// Every file of the torrent.
+    paths: Vec<PathBuf>,
+    root_path: PathBuf,
+}
+
+impl Active<'_> {
+    /// Mirrors torrent stats into the task's progress until it finishes (and, if seeding
+    /// is enabled, until a seeding limit is reached), or the task is cancelled.
+    async fn follow(self, resuming: bool) -> Result<Outcome, ProtocolError> {
+        let ctx = self.ctx;
+        let mut checking = true;
+        let mut seeding_since: Option<Instant> = None;
+        loop {
+            tokio::select! {
+                biased;
+                () = ctx.cancel.cancelled() => {
+                    self.stop_and_save().await;
+                    return Ok(Outcome::Stopped);
+                }
+                () = tokio::time::sleep(if checking { CHECK_POLL } else { POLL }) => {}
             }
-            () = tokio::time::sleep(POLL) => {}
-        }
-        let stats = handle.stats();
-        ctx.progress.set_downloaded(stats.progress_bytes.min(total));
-        if let Some(live) = &stats.live {
-            let peers = live.snapshot.peer_stats.live;
-            ctx.progress.set_peers(Some(peers));
-            ctx.progress
-                .set_connections(u16::try_from(peers).unwrap_or(u16::MAX));
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "speed in MiB/s → B/s, saturating"
-            )]
-            let up = (live.upload_speed.mbps * 1024.0 * 1024.0) as u64;
-            ctx.progress.set_upload_bps(Some(up));
-        }
-        if matches!(stats.state, TorrentStatsState::Error) {
-            detach(session, id).await;
-            return Err(torrent_err(
-                stats
-                    .error
-                    .unwrap_or_else(|| "unknown torrent error".to_owned()),
-            ));
-        }
-        if !stats.finished {
-            continue;
-        }
-        if seeding_since.is_none() {
-            // Every wanted piece is on disk: mark the files before anyone opens them.
-            motw::mark_all(root_path.clone()).await;
-            if !ctx.settings.torrent.never_seed {
-                ctx.events.phase(RunPhase::Seeding);
+            let stats = self.handle.stats();
+            match stats.state {
+                // Here `progress_bytes` counts *hashed* bytes, good or bad, of all files.
+                TorrentStatsState::Initializing { .. } => {
+                    if resuming {
+                        ctx.progress.set_check_percent(Some(percent(
+                            stats.progress_bytes,
+                            stats.total_bytes,
+                        )));
+                    }
+                    continue;
+                }
+                TorrentStatsState::Error => {
+                    detach(self.session, self.id).await;
+                    return Err(torrent_err(
+                        stats
+                            .error
+                            .unwrap_or_else(|| "unknown torrent error".to_owned()),
+                    ));
+                }
+                TorrentStatsState::Live | TorrentStatsState::Paused => {}
             }
-        }
-        let started = *seeding_since.get_or_insert_with(Instant::now);
-        if seeding_done(
-            &ctx.settings.torrent,
-            stats.uploaded_bytes,
-            total,
-            started.elapsed(),
-        ) {
-            detach(session, id).await;
-            return Ok(Outcome::Completed { path: root_path });
+            let downloaded = stats.progress_bytes.min(self.total);
+            if checking {
+                checking = false;
+                ctx.progress.set_check_percent(None);
+                ctx.progress.rebase(downloaded);
+                // From here the data changes, so the saved map is no longer valid.
+                ctx.checkpoint
+                    .save_torrent_progress(ctx.task.id, downloaded, None)
+                    .await?;
+                if resuming {
+                    ctx.events.phase(RunPhase::Downloading);
+                }
+            }
+            ctx.progress.set_downloaded(downloaded);
+            if let Some(live) = &stats.live {
+                let peers = live.snapshot.peer_stats.live;
+                ctx.progress.set_peers(Some(peers));
+                ctx.progress
+                    .set_connections(u16::try_from(peers).unwrap_or(u16::MAX));
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "speed in MiB/s → B/s, saturating"
+                )]
+                let up = (live.upload_speed.mbps * 1024.0 * 1024.0) as u64;
+                ctx.progress.set_upload_bps(Some(up));
+            }
+            if !stats.finished {
+                continue;
+            }
+            if seeding_since.is_none() {
+                // Every wanted piece is on disk: mark the files before anyone opens them.
+                motw::mark_all(self.root_path.clone()).await;
+                if !ctx.settings.torrent.never_seed {
+                    ctx.events.phase(RunPhase::Seeding);
+                }
+            }
+            let started = *seeding_since.get_or_insert_with(Instant::now);
+            if seeding_done(
+                &ctx.settings.torrent,
+                stats.uploaded_bytes,
+                self.total,
+                started.elapsed(),
+            ) {
+                detach(self.session, self.id).await;
+                ctx.checkpoint
+                    .save_torrent_progress(ctx.task.id, downloaded, None)
+                    .await?;
+                return Ok(Outcome::Completed {
+                    path: self.root_path,
+                });
+            }
         }
     }
+
+    /// Stops the torrent and records which pieces are on disk (ADR-023). Failing to
+    /// record them only costs a full check on the next resume.
+    async fn stop_and_save(&self) {
+        let mut bits = None;
+        if let Err(e) = self.session.pause(self.handle).await {
+            tracing::debug!(%e, "pausing torrent");
+        }
+        // Still checking (or failed): the previous record, if any, stays as it is.
+        let api = Api::new(self.session.clone(), None);
+        if let Ok((have, _)) = api.api_dump_haves(TorrentIdOrHash::from(self.id)) {
+            bits = Some(have.as_raw_slice().to_vec());
+        }
+        let downloaded = self.handle.stats().progress_bytes.min(self.total);
+        detach(self.session, self.id).await;
+        let Some(bits) = bits else { return };
+        let paths = self.paths.clone();
+        let captured = tokio::task::spawn_blocking(move || HaveMap::capture(bits, &paths)).await;
+        let record = match captured {
+            Ok(Ok(map)) => map.to_bytes(),
+            Ok(Err(e)) => {
+                tracing::warn!(%e, "could not sync the torrent's files");
+                None
+            }
+            Err(_) => None,
+        };
+        if let Err(e) = self
+            .ctx
+            .checkpoint
+            .save_torrent_progress(self.ctx.task.id, downloaded, record.as_deref())
+            .await
+        {
+            tracing::warn!(%e, "could not save torrent progress");
+        }
+    }
+}
+
+/// `part` of `whole` in percent, rounded down.
+fn percent(part: u64, whole: u64) -> u8 {
+    let p = u128::from(part) * 100 / u128::from(whole.max(1));
+    u8::try_from(p.min(100)).unwrap_or(100)
 }
 
 /// What a `.torrent` file contains, read without any network access.
@@ -422,6 +575,14 @@ mod tests {
         assert_eq!(m.trackers, ["udp://t.example:80"]);
         assert!(parse_magnet("magnet:?dn=nohash").is_err());
         assert!(parse_magnet("https://example.com").is_err());
+    }
+
+    #[test]
+    fn percent_is_bounded() {
+        assert_eq!(percent(0, 0), 0);
+        assert_eq!(percent(1, 3), 33);
+        assert_eq!(percent(9, 3), 100);
+        assert_eq!(percent(u64::MAX, u64::MAX), 100);
     }
 
     #[test]

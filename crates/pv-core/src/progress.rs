@@ -35,6 +35,8 @@ pub struct Progress {
     pub peers: Option<u32>,
     /// Upload speed (torrents only).
     pub upload_bps: Option<u64>,
+    /// While existing data is being re-checked: how much of it, in percent.
+    pub check_percent: Option<u8>,
 }
 
 /// A point-in-time read of a [`ProgressSink`].
@@ -50,6 +52,11 @@ pub struct ProgressSample {
     pub peers: Option<u32>,
     /// Upload speed.
     pub upload_bps: Option<u64>,
+    /// Progress of re-checking existing data, in percent.
+    pub check_percent: Option<u8>,
+    /// Changes whenever `downloaded` jumped without data being transferred; see
+    /// [`ProgressSink::rebase`].
+    pub rebases: u32,
 }
 
 impl ProgressSample {
@@ -67,6 +74,7 @@ impl ProgressSample {
             connections_active: self.connections_active,
             peers: self.peers,
             upload_bps: self.upload_bps,
+            check_percent: self.check_percent,
         }
     }
 }
@@ -89,6 +97,8 @@ struct Counters {
     connections: AtomicU32,
     peers: AtomicU32,
     upload_bps: AtomicU64,
+    check_percent: AtomicU32,
+    rebases: AtomicU32,
 }
 
 /// Cheap-to-clone, lock-free progress counters shared between a protocol run (writer)
@@ -119,6 +129,8 @@ impl ProgressSink {
                 connections: AtomicU32::new(0),
                 peers: AtomicU32::new(NONE_U32),
                 upload_bps: AtomicU64::new(NONE_U64),
+                check_percent: AtomicU32::new(NONE_U32),
+                rebases: AtomicU32::new(0),
             }),
         }
     }
@@ -131,6 +143,20 @@ impl ProgressSink {
     /// Sets the absolute byte count (resume, torrent stats).
     pub fn set_downloaded(&self, bytes: u64) {
         self.inner.downloaded.store(bytes, Ordering::Relaxed);
+    }
+
+    /// Sets the byte count to what turned out to be on disk already. Unlike
+    /// [`set_downloaded`](Self::set_downloaded), the difference is not counted as speed.
+    pub fn rebase(&self, bytes: u64) {
+        self.inner.downloaded.store(bytes, Ordering::Relaxed);
+        self.inner.rebases.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Sets how much of the existing data has been re-checked (`None`: not checking).
+    pub fn set_check_percent(&self, percent: Option<u8>) {
+        self.inner
+            .check_percent
+            .store(percent.map_or(NONE_U32, u32::from), Ordering::Relaxed);
     }
 
     /// Sets the total size.
@@ -173,6 +199,9 @@ impl ProgressSink {
                 .unwrap_or(u16::MAX),
             peers: (peers != NONE_U32).then_some(peers),
             upload_bps: some_u64(self.inner.upload_bps.load(Ordering::Relaxed)),
+            // NONE_U32 does not fit in a u8, so "unknown" converts to `None`.
+            check_percent: u8::try_from(self.inner.check_percent.load(Ordering::Relaxed)).ok(),
+            rebases: self.inner.rebases.load(Ordering::Relaxed),
         }
     }
 }
@@ -199,7 +228,9 @@ mod tests {
                 total: None,
                 connections_active: 0,
                 peers: None,
-                upload_bps: None
+                upload_bps: None,
+                check_percent: None,
+                rebases: 0,
             }
         );
         let clone = sink.clone(); // shares the same counters
@@ -225,6 +256,15 @@ mod tests {
             (s.downloaded, s.total, s.peers, s.upload_bps),
             (10, None, None, None)
         );
+        sink.set_check_percent(Some(42));
+        clone.rebase(500);
+        let s = sink.sample();
+        assert_eq!(
+            (s.check_percent, s.downloaded, s.rebases),
+            (Some(42), 500, 1)
+        );
+        sink.set_check_percent(None);
+        assert_eq!(sink.sample().check_percent, None);
     }
 
     #[test]
@@ -255,6 +295,8 @@ mod tests {
             connections_active: 4,
             peers: None,
             upload_bps: None,
+            check_percent: None,
+            rebases: 0,
         };
         let p = sample.to_progress(id, 200);
         assert_eq!(p.eta_secs, Some(3));
@@ -279,6 +321,7 @@ mod tests {
 pub struct SpeedMeter {
     alpha: f64,
     last_bytes: Option<u64>,
+    rebases: u32,
     rate: f64,
 }
 
@@ -295,6 +338,7 @@ impl SpeedMeter {
         Self {
             alpha,
             last_bytes: None,
+            rebases: 0,
             rate: 0.0,
         }
     }
@@ -314,6 +358,22 @@ impl SpeedMeter {
         }
         self.last_bytes = Some(total_bytes);
         self.bps()
+    }
+
+    /// Like [`sample`](Self::sample), but a changed `rebases` counter (see
+    /// [`ProgressSink::rebase`]) makes this sample a new baseline: bytes that were
+    /// already on disk are not speed.
+    pub fn sample_rebased(
+        &mut self,
+        total_bytes: u64,
+        rebases: u32,
+        elapsed: std::time::Duration,
+    ) -> u64 {
+        if rebases != self.rebases {
+            self.rebases = rebases;
+            self.last_bytes = None;
+        }
+        self.sample(total_bytes, elapsed)
     }
 
     /// Current smoothed speed in bytes/second.
@@ -347,6 +407,18 @@ mod speed_tests {
             m.sample(total, TICK);
         }
         assert!((990_000..=1_010_000).contains(&m.bps()), "{}", m.bps());
+    }
+
+    #[test]
+    fn bytes_already_on_disk_are_not_speed() {
+        let mut m = SpeedMeter::default();
+        m.sample_rebased(0, 0, TICK);
+        assert_eq!(m.sample_rebased(60_000_000_000, 1, TICK), 0, "a rebase");
+        assert_eq!(
+            m.sample_rebased(60_001_000_000, 1, TICK),
+            1_200_000,
+            "then real transfer (4 MB/s at alpha 0.3)"
+        );
     }
 
     #[test]

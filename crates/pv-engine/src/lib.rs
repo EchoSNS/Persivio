@@ -52,9 +52,11 @@ impl EngineConfig {
     /// Defaults: HTTP and BitTorrent protocols, autostart on.
     #[must_use]
     pub fn new(db_path: impl Into<PathBuf>) -> Self {
+        let db_path = db_path.into();
+        let torrents = TorrentProtocol::with_work_dir(db_path.with_file_name("torrent-session"));
         Self {
-            db_path: db_path.into(),
-            protocols: vec![Arc::new(HttpProtocol), Arc::new(TorrentProtocol::new())],
+            db_path,
+            protocols: vec![Arc::new(HttpProtocol), Arc::new(torrents)],
             autostart: true,
         }
     }

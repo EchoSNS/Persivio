@@ -28,9 +28,22 @@ function progress(id: string, downloaded: number, speedBps = 100): ProgressView 
 		etaSecs: 9,
 		connections: 4,
 		peers: null,
-		uploadBps: null
+		uploadBps: null,
+		checkPercent: null
 	};
 }
+
+describe('checking', () => {
+	it('is active, reports its own percentage, and forgets it afterwards', () => {
+		let rows = fromList([task('a', { downloaded: 400 })]);
+		rows = applyEvent(rows, { type: 'state_changed', id: 'a', state: { type: 'checking' } }).rows;
+		expect(isActive(rows[0]!.state)).toBe(true);
+		rows = applyProgress(rows, [{ ...progress('a', 400, 0), checkPercent: 37 }]);
+		expect([rows[0]!.checkPercent, rows[0]!.downloaded]).toEqual([37, 400]);
+		rows = applyEvent(rows, { type: 'state_changed', id: 'a', state: { type: 'downloading' } }).rows;
+		expect(rows[0]!.checkPercent).toBeNull();
+	});
+});
 
 describe('applyEvent', () => {
 	it('adds a task once, even if it is already in the list', () => {

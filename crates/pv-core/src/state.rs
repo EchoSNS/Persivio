@@ -6,7 +6,8 @@
 //!  ──► Queued ──► Probing ──────────┐      Paused ◄── (any running state)
 //!        │                          ▼         │
 //!        ├──► FetchingMetadata ──► Downloading ──► Verifying ──► Completed
-//!        │                          │                ▲
+//!        ├──► Checking ────────────► │               ▲
+//!        │    (torrent resume)       │               │
 //!        └──────────────────────────┤                │ (HTTP, no checksum: direct)
 //!                                   └──► Seeding ────┘ (torrents)
 //!
@@ -103,6 +104,8 @@ pub enum TaskState {
     Probing,
     /// Torrent: resolving metadata from a magnet link.
     FetchingMetadata,
+    /// Torrent: re-checking the pieces already on disk before continuing.
+    Checking,
     /// Transferring data.
     Downloading,
     /// Stopped by the user (or by crash recovery); can be resumed.
@@ -134,6 +137,8 @@ pub enum TaskStateKind {
     Probing,
     /// See [`TaskState::FetchingMetadata`].
     FetchingMetadata,
+    /// See [`TaskState::Checking`].
+    Checking,
     /// See [`TaskState::Downloading`].
     Downloading,
     /// See [`TaskState::Paused`].
@@ -152,10 +157,11 @@ pub enum TaskStateKind {
 
 impl TaskStateKind {
     /// Every kind, in declaration order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Queued,
         Self::Probing,
         Self::FetchingMetadata,
+        Self::Checking,
         Self::Downloading,
         Self::Paused,
         Self::Verifying,
@@ -172,6 +178,7 @@ impl TaskStateKind {
             Self::Queued => "queued",
             Self::Probing => "probing",
             Self::FetchingMetadata => "fetching_metadata",
+            Self::Checking => "checking",
             Self::Downloading => "downloading",
             Self::Paused => "paused",
             Self::Verifying => "verifying",
@@ -195,6 +202,7 @@ impl TaskStateKind {
             self,
             Self::Probing
                 | Self::FetchingMetadata
+                | Self::Checking
                 | Self::Downloading
                 | Self::Verifying
                 | Self::Seeding
@@ -213,15 +221,20 @@ impl TaskStateKind {
                 to,
                 K::Probing
                     | K::FetchingMetadata
+                    | K::Checking
                     | K::Downloading
                     | K::Paused
                     | K::Failed
                     | K::Cancelled
             ),
             // Preparing: proceed, get preempted back to the queue, or stop.
-            K::Probing | K::FetchingMetadata => matches!(
+            K::Probing | K::Checking => matches!(
                 to,
                 K::Downloading | K::Queued | K::Paused | K::Failed | K::Cancelled
+            ),
+            K::FetchingMetadata => matches!(
+                to,
+                K::Checking | K::Downloading | K::Queued | K::Paused | K::Failed | K::Cancelled
             ),
             // Downloading: finish via verify / directly / seeding, preempt, or stop.
             K::Downloading => matches!(
@@ -278,6 +291,7 @@ impl TaskState {
             Self::Queued => TaskStateKind::Queued,
             Self::Probing => TaskStateKind::Probing,
             Self::FetchingMetadata => TaskStateKind::FetchingMetadata,
+            Self::Checking => TaskStateKind::Checking,
             Self::Downloading => TaskStateKind::Downloading,
             Self::Paused => TaskStateKind::Paused,
             Self::Verifying => TaskStateKind::Verifying,
@@ -318,18 +332,19 @@ mod tests {
 
     /// The full expected table, written independently of `can_transition_to`.
     /// Rows = from, columns = to, in `TaskStateKind::ALL` order:
-    /// Que Pro Fet Dow Pau Ver See Com Fai Can
-    const EXPECTED: [[u8; 10]; 10] = [
-        /* Queued           */ [0, 1, 1, 1, 1, 0, 0, 0, 1, 1],
-        /* Probing          */ [1, 0, 0, 1, 1, 0, 0, 0, 1, 1],
-        /* FetchingMetadata */ [1, 0, 0, 1, 1, 0, 0, 0, 1, 1],
-        /* Downloading      */ [1, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-        /* Paused           */ [1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
-        /* Verifying        */ [0, 0, 0, 0, 1, 0, 0, 1, 1, 1],
-        /* Seeding          */ [0, 0, 0, 0, 1, 0, 0, 1, 1, 1],
-        /* Completed        */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        /* Failed           */ [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-        /* Cancelled        */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    /// Que Pro Fet Che Dow Pau Ver See Com Fai Can
+    const EXPECTED: [[u8; 11]; 11] = [
+        /* Queued           */ [0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1],
+        /* Probing          */ [1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1],
+        /* FetchingMetadata */ [1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1],
+        /* Checking         */ [1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1],
+        /* Downloading      */ [1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+        /* Paused           */ [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+        /* Verifying        */ [0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1],
+        /* Seeding          */ [0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1],
+        /* Completed        */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        /* Failed           */ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        /* Cancelled        */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     ];
 
     fn sample(kind: TaskStateKind) -> TaskState {
@@ -337,6 +352,7 @@ mod tests {
             TaskStateKind::Queued => TaskState::Queued,
             TaskStateKind::Probing => TaskState::Probing,
             TaskStateKind::FetchingMetadata => TaskState::FetchingMetadata,
+            TaskStateKind::Checking => TaskState::Checking,
             TaskStateKind::Downloading => TaskState::Downloading,
             TaskStateKind::Paused => TaskState::Paused,
             TaskStateKind::Verifying => TaskState::Verifying,
@@ -369,7 +385,7 @@ mod tests {
                 checked += 1;
             }
         }
-        assert_eq!(checked, 100);
+        assert_eq!(checked, 121);
     }
 
     #[test]

@@ -94,6 +94,7 @@ mod tests {
             connections_active: 1,
             peers: None,
             upload_bps: None,
+            check_percent: None,
         }])
     }
 

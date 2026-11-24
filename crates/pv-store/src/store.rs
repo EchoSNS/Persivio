@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use pv_core::{
     CheckpointError, CheckpointSink, Checksum, FailReason, FileEntry, HttpResumeInfo, Segment,
     Settings, Source, TaskId, TaskKind, TaskSnapshot, TaskSpec, TaskState, TaskStateKind,
-    UnixMillis,
+    TorrentResume, UnixMillis,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,14 @@ use crate::convert::{opt_to_i64, opt_to_u64, path_to_str, to_i64, to_small, to_u
 
 /// Migrations embedded at compile time from `crates/pv-store/migrations/`.
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+
+/// Tasks with their torrent progress (0 for HTTP tasks), aliased `t`.
+macro_rules! select_tasks {
+    () => {
+        "SELECT t.*, COALESCE(s.downloaded, 0) AS torrent_downloaded
+         FROM tasks t LEFT JOIN torrent_state s ON s.task_id = t.id"
+    };
+}
 
 /// Settings-table key under which the application [`Settings`] are stored.
 pub const SETTINGS_KEY: &str = "app";
@@ -339,21 +347,44 @@ impl Store {
         Ok(())
     }
 
-    /// Loads a torrent's metadata: `(info_hash, torrent_bytes)`.
+    /// Stores how much of a torrent is on disk and the protocol's record of which parts.
+    ///
+    /// # Errors
+    /// Database errors; [`StoreError::NotFound`] if no metadata was saved for the task.
+    pub async fn update_torrent_progress(
+        &self,
+        id: TaskId,
+        downloaded: u64,
+        have: Option<&[u8]>,
+    ) -> Result<(), StoreError> {
+        let result =
+            sqlx::query("UPDATE torrent_state SET downloaded = ?, have = ? WHERE task_id = ?")
+                .bind(to_i64(downloaded)?)
+                .bind(have)
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await?;
+        not_found_if_zero(result.rows_affected(), id)
+    }
+
+    /// Loads what a torrent needs to resume.
     ///
     /// # Errors
     /// Database errors.
-    pub async fn torrent_state(&self, id: TaskId) -> Result<Option<(String, Vec<u8>)>, StoreError> {
-        let row = sqlx::query("SELECT info_hash, resume_blob FROM torrent_state WHERE task_id = ?")
-            .bind(id.to_string())
-            .fetch_optional(&self.pool)
-            .await?;
+    pub async fn torrent_state(&self, id: TaskId) -> Result<Option<TorrentResume>, StoreError> {
+        let row =
+            sqlx::query("SELECT info_hash, resume_blob, have FROM torrent_state WHERE task_id = ?")
+                .bind(id.to_string())
+                .fetch_optional(&self.pool)
+                .await?;
         row.map(|r| -> Result<_, StoreError> {
-            Ok((
-                r.try_get("info_hash")?,
-                r.try_get::<Option<Vec<u8>>, _>("resume_blob")?
+            Ok(TorrentResume {
+                info_hash: r.try_get("info_hash")?,
+                torrent_bytes: r
+                    .try_get::<Option<Vec<u8>>, _>("resume_blob")?
                     .unwrap_or_default(),
-            ))
+                have: r.try_get("have")?,
+            })
         })
         .transpose()
     }
@@ -394,7 +425,7 @@ impl Store {
                 .push(segment_from_row(row)?);
         }
 
-        let rows = sqlx::query("SELECT * FROM tasks ORDER BY created_at, id")
+        let rows = sqlx::query(concat!(select_tasks!(), " ORDER BY t.created_at, t.id"))
             .fetch_all(&self.pool)
             .await?;
         rows.iter()
@@ -410,7 +441,7 @@ impl Store {
     /// # Errors
     /// Database errors or [`StoreError::Corrupt`] rows.
     pub async fn get_task(&self, id: TaskId) -> Result<Option<StoredTask>, StoreError> {
-        let Some(row) = sqlx::query("SELECT * FROM tasks WHERE id = ?")
+        let Some(row) = sqlx::query(concat!(select_tasks!(), " WHERE t.id = ?"))
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await?
@@ -551,6 +582,17 @@ impl CheckpointSink for Store {
             .await
             .map_err(|e| CheckpointError(e.to_string()))
     }
+
+    async fn save_torrent_progress(
+        &self,
+        id: TaskId,
+        downloaded: u64,
+        have: Option<&[u8]>,
+    ) -> Result<(), CheckpointError> {
+        self.update_torrent_progress(id, downloaded, have)
+            .await
+            .map_err(|e| CheckpointError(e.to_string()))
+    }
 }
 
 fn not_found_if_zero(rows: u64, id: TaskId) -> Result<(), StoreError> {
@@ -581,6 +623,7 @@ fn state_from_columns(kind: TaskStateKind, fail: Option<&str>) -> Result<TaskSta
         K::Queued => TaskState::Queued,
         K::Probing => TaskState::Probing,
         K::FetchingMetadata => TaskState::FetchingMetadata,
+        K::Checking => TaskState::Checking,
         K::Downloading => TaskState::Downloading,
         K::Paused => TaskState::Paused,
         K::Verifying => TaskState::Verifying,
@@ -657,7 +700,12 @@ fn task_from_row(row: &SqliteRow, segments: Vec<Segment>) -> Result<StoredTask, 
         spec,
         state,
         total_size: opt_to_u64(row.try_get("total_size")?, "tasks.total_size")?,
-        downloaded: segments.iter().map(|s| s.downloaded).sum(),
+        // HTTP tasks have segments, torrents a byte count; the other part is zero.
+        downloaded: segments.iter().map(|s| s.downloaded).sum::<u64>()
+            + to_u64(
+                row.try_get("torrent_downloaded")?,
+                "torrent_state.downloaded",
+            )?,
         created_at: UnixMillis(row.try_get("created_at")?),
         updated_at: UnixMillis(row.try_get("updated_at")?),
         completed_at: row

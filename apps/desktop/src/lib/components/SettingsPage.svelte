@@ -205,9 +205,9 @@
 {/snippet}
 
 <div class="h-full overflow-y-auto">
-	<form class="mx-auto max-w-2xl space-y-6 px-6 py-6" onsubmit={save}>
-		<div class="flex items-center justify-between">
-			<h1 class="text-lg font-semibold">Settings</h1>
+	<form class="mx-auto max-w-2xl space-y-4 px-2 pb-6" onsubmit={save}>
+		<div class="glass sticky top-0 z-10 flex items-center justify-between rounded-full py-2 pr-2.5 pl-5">
+			<h1 class="text-base font-semibold">Settings</h1>
 			<div class="flex gap-2">
 				<button type="button" class="btn" disabled={!dirty || saving} onclick={() => saved && reset(saved)}>
 					Discard changes
@@ -219,7 +219,7 @@
 		</div>
 
 		{#if error}
-			<p role="alert" class="rounded-md bg-red-50 p-2.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>
+			<p role="alert" class="rounded-xl bg-red-500/15 p-2.5 text-sm text-red-800 dark:text-red-200">{error}</p>
 		{/if}
 
 		{#if draft}
@@ -280,7 +280,7 @@
 				{@render section('Speed limit')}
 				<label class="label" for="s-limit">Global download limit (MiB/s)</label>
 				<input id="s-limit" class="input sm:w-48" inputmode="decimal" placeholder="Unlimited" bind:value={limitMiB} />
-				<p class="hint">Applies to all HTTP downloads; torrents pick it up after a restart.</p>
+				<p class="hint">Shared by all downloads. Changes apply immediately, also to running ones.</p>
 			</section>
 
 			<section class="panel p-4">
@@ -312,7 +312,7 @@
 						<input type="checkbox" class="accent-teal-600" bind:checked={draft.torrent.upnp} />
 						Ask the router to open the port (UPnP)
 					</label>
-					<p class="hint">Port, DHT and UPnP changes take effect after restarting the app.</p>
+					<p class="hint">Port, DHT and UPnP changes take effect once no torrent has run for a minute, or after a restart.</p>
 				</div>
 			</section>
 
@@ -335,7 +335,7 @@
 				{@render section('Categories')}
 				<ul class="mb-3 flex flex-wrap gap-2">
 					{#each draft.categories as c (c)}
-						<li class="inline-flex items-center gap-1 rounded-md bg-zinc-100 py-0.5 pr-0.5 pl-2 text-xs dark:bg-zinc-800">
+						<li class="chip pr-0.5">
 							{c}
 							<button
 								type="button"
@@ -402,7 +402,7 @@
 							</div>
 						</div>
 					</div>
-					<p class="text-xs {bridge?.error ? 'text-red-600 dark:text-red-400' : 'text-zinc-500'}">
+					<p class="text-xs {bridge?.error ? 'text-red-700 dark:text-red-300' : 'text-(--muted)'}">
 						{bridge?.running
 							? `Running on 127.0.0.1:${saved?.desktop.bridgePort}.`
 							: bridge?.error
@@ -436,21 +436,36 @@
 
 		<section class="panel p-4">
 			{@render section('Appearance')}
-			<div class="inline-flex rounded-md border border-zinc-300 p-0.5 dark:border-zinc-700" role="radiogroup" aria-label="Theme">
+			<div class="inline-flex rounded-full border border-(--line) bg-(--control) p-0.5" role="radiogroup" aria-label="Theme">
 				{#each THEMES as t (t.value)}
 					<button
 						type="button"
 						role="radio"
 						aria-checked={theme.choice === t.value}
-						class="inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs {theme.choice === t.value
-							? 'bg-teal-600 text-white'
-							: 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none {theme.choice === t.value
+							? 'bg-teal-700 text-white'
+							: 'hover:bg-(--control-hover)'}"
 						onclick={() => theme.set(t.value)}
 					>
 						<t.Icon size={13} /> {t.label}
 					</button>
 				{/each}
 			</div>
+			<label class="mt-3 flex items-start gap-2 text-sm">
+				<input
+					type="checkbox"
+					class="mt-0.5 accent-teal-600"
+					checked={theme.surface === 'glass'}
+					onchange={(e) => theme.setSurface(e.currentTarget.checked ? 'glass' : 'solid')}
+				/>
+				<span>
+					Glass effects
+					<span class="hint block">
+						Translucent, blurred surfaces. Turn off for solid ones, which is faster on older graphics
+						hardware. Always off when the system asks for less transparency or more contrast.
+					</span>
+				</span>
+			</label>
 			<p class="hint">Saved on this computer immediately.</p>
 		</section>
 
@@ -459,7 +474,7 @@
 			<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
 				{#each SHORTCUTS as [keys, what] (keys)}
 					<dt><span class="kbd">{keys}</span></dt>
-					<dd class="text-zinc-600 dark:text-zinc-400">{what}</dd>
+					<dd class="text-(--muted)">{what}</dd>
 				{/each}
 			</dl>
 		</section>

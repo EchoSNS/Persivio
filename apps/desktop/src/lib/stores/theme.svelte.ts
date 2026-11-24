@@ -1,45 +1,72 @@
-// Light / dark / system theme. The choice is a per-machine view preference, so it lives
-// in the webview's localStorage (guarded: storage can be unavailable).
+// Light / dark / system theme and the glass effect. Both are per-machine view preferences,
+// so they live in the webview's localStorage (guarded: storage can be unavailable).
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
+export type SurfaceChoice = 'glass' | 'solid';
 
-const KEY = 'persivio.theme';
+const THEME_KEY = 'persivio.theme';
+const SURFACE_KEY = 'persivio.surface';
 
-function load(): ThemeChoice {
+function load(key: string): string | null {
 	try {
-		const v = localStorage.getItem(KEY);
-		return v === 'light' || v === 'dark' ? v : 'system';
+		return localStorage.getItem(key);
 	} catch {
-		return 'system';
+		return null;
 	}
 }
 
-class Theme {
-	choice = $state<ThemeChoice>(load());
-	#media: MediaQueryList | null = null;
+function store(key: string, value: string): void {
+	try {
+		localStorage.setItem(key, value);
+	} catch {
+		// Not persisted; still applied for this session.
+	}
+}
 
-	/** Applies the theme and follows the OS while the choice is `system`. */
+function loadTheme(): ThemeChoice {
+	const v = load(THEME_KEY);
+	return v === 'light' || v === 'dark' ? v : 'system';
+}
+
+class Theme {
+	choice = $state<ThemeChoice>(loadTheme());
+	surface = $state<SurfaceChoice>(load(SURFACE_KEY) === 'solid' ? 'solid' : 'glass');
+	#dark: MediaQueryList | null = null;
+	#opaque: MediaQueryList | null = null;
+
+	/** Applies the theme and follows the OS (color scheme, reduced transparency). */
 	start(): () => void {
-		this.#media = window.matchMedia('(prefers-color-scheme: dark)');
+		this.#dark = window.matchMedia('(prefers-color-scheme: dark)');
+		this.#opaque = window.matchMedia(
+			'(prefers-reduced-transparency: reduce), (prefers-contrast: more)'
+		);
 		const onChange = () => this.apply();
-		this.#media.addEventListener('change', onChange);
+		this.#dark.addEventListener('change', onChange);
+		this.#opaque.addEventListener('change', onChange);
 		this.apply();
-		return () => this.#media?.removeEventListener('change', onChange);
+		return () => {
+			this.#dark?.removeEventListener('change', onChange);
+			this.#opaque?.removeEventListener('change', onChange);
+		};
 	}
 
 	set(choice: ThemeChoice): void {
 		this.choice = choice;
-		try {
-			localStorage.setItem(KEY, choice);
-		} catch {
-			// Not persisted; still applied for this session.
-		}
+		store(THEME_KEY, choice);
+		this.apply();
+	}
+
+	setSurface(surface: SurfaceChoice): void {
+		this.surface = surface;
+		store(SURFACE_KEY, surface);
 		this.apply();
 	}
 
 	apply(): void {
-		const dark = this.choice === 'dark' || (this.choice === 'system' && !!this.#media?.matches);
+		const dark = this.choice === 'dark' || (this.choice === 'system' && !!this.#dark?.matches);
+		const solid = this.surface === 'solid' || !!this.#opaque?.matches;
 		document.documentElement.classList.toggle('dark', dark);
+		document.documentElement.classList.toggle('solid', solid);
 	}
 }
 

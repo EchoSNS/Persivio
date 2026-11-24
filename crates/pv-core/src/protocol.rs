@@ -35,6 +35,10 @@ pub trait Protocol: Send + Sync {
 
     /// Releases shared resources (sockets, sessions) at engine shutdown. Default: nothing.
     async fn shutdown(&self) {}
+
+    /// The user changed the settings while this protocol may be running. Must not block.
+    /// Default: nothing (new runs get the new settings anyway).
+    fn settings_changed(&self, _settings: &Settings) {}
 }
 
 /// How a run ended without error.
@@ -56,6 +60,8 @@ pub enum RunPhase {
     Probing,
     /// Torrent metadata being resolved.
     FetchingMetadata,
+    /// Torrent: re-checking pieces already on disk.
+    Checking,
     /// Data transfer.
     Downloading,
     /// Checksum verification.
@@ -71,6 +77,7 @@ impl RunPhase {
         match self {
             Self::Probing => TaskState::Probing,
             Self::FetchingMetadata => TaskState::FetchingMetadata,
+            Self::Checking => TaskState::Checking,
             Self::Downloading => TaskState::Downloading,
             Self::Verifying => TaskState::Verifying,
             Self::Seeding => TaskState::Seeding,
@@ -134,6 +141,18 @@ pub trait CheckpointSink: Send + Sync {
     ) -> Result<(), CheckpointError> {
         Ok(())
     }
+
+    /// Stores how much of a torrent is on disk, and (only after its data was synced) the
+    /// protocol's opaque record of *which* parts (`None` clears it). The default does
+    /// nothing (HTTP-only sinks).
+    async fn save_torrent_progress(
+        &self,
+        _id: TaskId,
+        _downloaded: u64,
+        _have: Option<&[u8]>,
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
 }
 
 /// A byte-rate limiter shared by all workers of a task (and globally).
@@ -160,6 +179,9 @@ pub struct TorrentResume {
     pub info_hash: String,
     /// The bencoded `.torrent` (metainfo) bytes.
     pub torrent_bytes: Vec<u8>,
+    /// Which parts are on disk, as saved by [`CheckpointSink::save_torrent_progress`]
+    /// when the last run stopped cleanly.
+    pub have: Option<Vec<u8>>,
 }
 
 /// Where a resumed run picks up.
@@ -311,6 +333,7 @@ mod tests {
         for phase in [
             RunPhase::Probing,
             RunPhase::FetchingMetadata,
+            RunPhase::Checking,
             RunPhase::Downloading,
             RunPhase::Verifying,
             RunPhase::Seeding,

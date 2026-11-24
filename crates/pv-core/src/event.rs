@@ -75,6 +75,7 @@ mod tests {
                 connections_active: 1,
                 peers: Some(4),
                 upload_bps: Some(5),
+                check_percent: None,
             }]),
             EngineEvent::MetadataResolved {
                 id,

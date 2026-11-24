@@ -37,26 +37,25 @@
 	{@const key = filterKey(f)}
 	<li>
 		<button
-			class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:ring-teal-500/60 focus-visible:outline-none
-				{current === key
-				? 'bg-teal-600/10 font-medium text-teal-800 dark:bg-teal-400/10 dark:text-teal-300'
-				: 'text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+			class="nav-item"
 			aria-current={current === key ? 'page' : undefined}
 			onclick={() => onfilter(f)}
 		>
 			<Icon size={16} aria-hidden="true" />
 			<span class="flex-1 truncate">{label}</span>
-			<span class="text-xs text-zinc-500 tabular-nums">{counts.get(key) ?? 0}</span>
+			{#if counts.get(key)}
+				<span class="text-xs text-(--muted) tabular-nums">{counts.get(key)}</span>
+			{/if}
 		</button>
 	</li>
 {/snippet}
 
 <nav
-	class="flex h-full w-52 shrink-0 flex-col border-r border-zinc-200 bg-zinc-100/60 dark:border-zinc-800 dark:bg-zinc-900/60"
+	class="glass flex w-52 shrink-0 flex-col rounded-3xl"
 	aria-label="Download lists"
 >
 	<div class="flex items-center gap-2 px-4 py-3.5">
-		<span class="grid size-6 place-items-center rounded-md bg-teal-600 text-white" aria-hidden="true">
+		<span class="grid size-7 place-items-center rounded-xl border border-white/30 bg-linear-to-br from-teal-500 to-cyan-600 text-white shadow-md shadow-teal-600/30" aria-hidden="true">
 			<Download size={14} strokeWidth={2.5} />
 		</span>
 		<span class="text-sm font-semibold tracking-tight">Persivio</span>
@@ -69,7 +68,7 @@
 			{/each}
 		</ul>
 		{#if categories.length > 0}
-			<h2 class="mt-5 mb-1 px-2.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
+			<h2 class="mt-5 mb-1 px-2.5 text-[11px] font-semibold tracking-wide text-(--muted) uppercase">
 				Categories
 			</h2>
 			<ul class="space-y-0.5">
@@ -80,12 +79,9 @@
 		{/if}
 	</div>
 
-	<div class="border-t border-zinc-200 p-2 dark:border-zinc-800">
+	<div class="border-t border-(--line) p-2">
 		<button
-			class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-500/60 focus-visible:outline-none
-				{settingsOpen
-				? 'bg-teal-600/10 font-medium text-teal-800 dark:bg-teal-400/10 dark:text-teal-300'
-				: 'text-zinc-700 hover:bg-zinc-200/70 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+			class="nav-item"
 			aria-current={settingsOpen ? 'page' : undefined}
 			onclick={onsettings}
 		>

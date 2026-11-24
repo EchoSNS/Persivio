@@ -10,21 +10,37 @@
 	import type { Selection } from '#lib/stores/selection.ts';
 	import TaskRow from './TaskRow.svelte';
 
-	const ROW_HEIGHT = 56;
+	const ROW_HEIGHT = 74;
 
 	type Props = {
 		rows: Row[];
 		selection: Selection;
 		onselect: (id: string, e: MouseEvent) => void;
 		onopen: (id: string) => void;
+		onmenu: (id: string, e: MouseEvent) => void;
 		onpause: (id: string) => void;
 		onresume: (id: string) => void;
 		onremove: (id: string) => void;
 		onreveal: (id: string) => void;
 		label: string;
+		/** Space kept free for what floats over the top and bottom of the list. */
+		insetTop?: number;
+		insetBottom?: number;
 	};
-	let { rows, selection, onselect, onopen, onpause, onresume, onremove, onreveal, label }: Props =
-		$props();
+	let {
+		rows,
+		selection,
+		onselect,
+		onopen,
+		onmenu,
+		onpause,
+		onresume,
+		onremove,
+		onreveal,
+		label,
+		insetTop = 0,
+		insetBottom = 0
+	}: Props = $props();
 
 	let scroller: HTMLDivElement | undefined = $state();
 
@@ -38,7 +54,14 @@
 	// `get` reads the virtualizer without subscribing: `setOptions` updates the store, and
 	// a tracked read here would rerun this effect forever.
 	$effect(() => {
-		get(virtualizer).setOptions({ count: rows.length });
+		get(virtualizer).setOptions({
+			count: rows.length,
+			paddingStart: insetTop,
+			paddingEnd: insetBottom,
+			// Rows brought into view by the keyboard must not end up under the bars.
+			scrollPaddingStart: insetTop,
+			scrollPaddingEnd: insetBottom
+		});
 	});
 
 	// Keep the keyboard focus row in view.
@@ -77,6 +100,7 @@
 						focused={selection.focus === row.id}
 						onselect={(e) => onselect(row.id, e)}
 						onopen={() => onopen(row.id)}
+						onmenu={(e) => onmenu(row.id, e)}
 						onpause={() => onpause(row.id)}
 						onresume={() => onresume(row.id)}
 						onremove={() => onremove(row.id)}

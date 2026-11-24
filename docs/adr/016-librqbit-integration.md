@@ -1,6 +1,6 @@
 # ADR-016: How librqbit is mapped onto Persivio
 
-- **Status:** Accepted
+- **Status:** Accepted; points 1 and 2 changed by ADR-023
 - **Date:** 2026-11-23
 
 ## Context
@@ -36,9 +36,10 @@ scheduling and state (ADR-002) and its SQLite database is the source of truth (A
    streaming API for reading). Faking it would mislead users.
 
 ## Consequences
-- Resuming a large torrent re-reads its existing data to verify pieces, which costs disk I/O.
+- Resuming a large torrent re-reads its existing data to verify pieces, which costs disk
+  I/O (since ADR-023: only after a crash or when its files changed).
 - Speed limits: the per-task limit maps to librqbit's per-torrent limit. The global limit
-  is applied to the session at creation and does not yet follow runtime changes.
+  is applied to the session and follows runtime changes (ADR-023).
 - A seeding torrent occupies a scheduler slot (`Seeding` is a running state). The CLI's
   `watch` does not wait for seeding to end.
 - Tests use a real second librqbit session (`pv_torrent::testing::LocalSeeder`, feature
