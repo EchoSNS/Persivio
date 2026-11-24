@@ -29,12 +29,25 @@ impl LocalSeeder {
         reason = "test support"
     )]
     pub async fn start(path: &Path, name: &str) -> Self {
+        Self::start_on(path, name, 0).await
+    }
+
+    /// [`start`](Self::start), listening on a given port.
+    ///
+    /// # Panics
+    /// On any setup failure: this is test-only code.
+    #[allow(
+        clippy::unwrap_used,
+        clippy::missing_panics_doc,
+        reason = "test support"
+    )]
+    pub async fn start_on(path: &Path, name: &str, port: u16) -> Self {
         let opts = SessionOptions {
             dht: None,
             persistence: None,
             disable_local_service_discovery: true,
             listen: Some(ListenerOptions {
-                listen_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
+                listen_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
                 ..ListenerOptions::default()
             }),
             ..SessionOptions::default()

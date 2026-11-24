@@ -41,3 +41,14 @@ afterwards", again after every pause; and Malwarebytes reporting blocked address
   if one is wrong.
 - Security software still reports addresses while a torrent runs. That is inherent to
   BitTorrent: peers are strangers. Turning off DHT reduces it.
+
+## Addendum: torrents with few peers (2026-11-24)
+The soak test found torrents with a single peer standing still for minutes. librqbit now
+and then loses the first message on a new connection (seen on the seeding side in about 1
+of 100 local downloads). After the 10 s read timeout the peer is retried with a back-off of
+10 s, then minutes, up to an hour; nothing shortens it.
+
+Persivio restarts a torrent's networking (pause and unpause inside librqbit, which keeps
+the pieces) when no peer has been connected for 1 minute, then 2, 4, … up to 10 minutes.
+That retries known peers at once and asks trackers and the DHT again; the growing interval
+keeps it polite to trackers.

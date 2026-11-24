@@ -122,7 +122,7 @@ async fn round(e: &EngineHandle, world: &World, dest: &Path, round: usize) {
             .unwrap();
         expected.insert(id, hash);
     }
-    let deadline = Instant::now() + Duration::from_secs(180);
+    let deadline = Instant::now() + Duration::from_mins(5);
     let mut disturbed = 0;
     let started = Instant::now();
     let mut reported = 0;

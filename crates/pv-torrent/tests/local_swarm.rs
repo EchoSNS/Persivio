@@ -661,6 +661,46 @@ async fn the_session_closes_when_idle_and_reopens_when_needed() {
     }
 }
 
+/// The only peer is not reachable at first. librqbit alone would wait 10 to 20 s before
+/// trying again (then minutes, up to an hour).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_lone_peer_that_appears_later_is_found_without_the_long_back_off() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = Fixture::random("late.bin", 300_000, 11);
+    std::fs::create_dir_all(dir.path().join("seed")).unwrap();
+    let src = dir.path().join("seed/late.bin");
+    std::fs::write(&src, &f.bytes).unwrap();
+    // Create the torrent, then take its seeder offline.
+    let first = seed(&src, "late.bin").await;
+    let (torrent, addr) = (first.torrent.clone(), first.addr);
+    first.stop().await;
+    drop(first);
+
+    let protocol = Arc::new(
+        TorrentProtocol::with_work_dir(dir.path().join("work"))
+            .with_stall_timeout(Duration::from_secs(1))
+            .with_initial_peers(vec![addr]),
+    );
+    let r = run_ctx(
+        Source::TorrentFile { bytes: torrent },
+        &dir.path().join("dl"),
+        settings(true),
+    );
+    let (p, start) = (protocol.clone(), std::time::Instant::now());
+    let handle = tokio::spawn(async move { p.run(r.ctx).await });
+    tokio::time::sleep(Duration::from_secs(4)).await; // Windows retries a refused connection for 2 s
+    assert!(!handle.is_finished());
+    let _seeder = LocalSeeder::start_on(&src, "late.bin", addr.port()).await;
+    let path = completed(handle.await.unwrap().unwrap());
+    assert!(
+        start.elapsed() < Duration::from_secs(11),
+        "took {:?}",
+        start.elapsed()
+    );
+    assert_eq!(sha256_file(&path).await.unwrap(), f.sha256);
+    protocol.stop().await;
+}
+
 /// Two tasks for one torrent would write to the same files.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_torrent_that_is_already_running_is_refused() {

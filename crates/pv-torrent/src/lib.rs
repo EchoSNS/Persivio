@@ -38,6 +38,13 @@ use session::SharedSession;
 pub use paths::validate_torrent_path;
 pub use seeding::seeding_done;
 
+/// With no connected peer for this long, peers are searched again (then after twice as
+/// long, and so on up to [`MAX_STALL`], to stay polite to trackers).
+const STALL: Duration = Duration::from_mins(1);
+
+/// Longest interval between two searches.
+const MAX_STALL: Duration = Duration::from_mins(10);
+
 /// How often torrent stats are copied into the task's progress counters.
 const POLL: Duration = Duration::from_millis(250);
 
@@ -77,6 +84,7 @@ pub struct TorrentProtocol {
     session: Arc<SharedSession>,
     /// Peers to contact directly, in addition to trackers/DHT (LAN use and tests).
     initial_peers: Vec<SocketAddr>,
+    stall: Duration,
 }
 
 impl Default for TorrentProtocol {
@@ -90,10 +98,7 @@ impl TorrentProtocol {
     /// a [work directory](Self::with_work_dir) every resume re-checks all data.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            session: Arc::new(SharedSession::new(None, session::DEFAULT_IDLE)),
-            initial_peers: Vec::new(),
-        }
+        Self::with_options(None, session::DEFAULT_IDLE)
     }
 
     /// Enables fast resume. `dir` must be used by nothing else: it is **emptied** each
@@ -110,7 +115,15 @@ impl TorrentProtocol {
         Self {
             session: Arc::new(SharedSession::new(work_dir, idle)),
             initial_peers: Vec::new(),
+            stall: STALL,
         }
+    }
+
+    /// How long a torrent may have no connected peer before peers are searched again.
+    #[must_use]
+    pub fn with_stall_timeout(mut self, stall: Duration) -> Self {
+        self.stall = stall;
+        self
     }
 
     /// Also connects to these peers for every torrent (local seeding, tests).
@@ -276,6 +289,7 @@ impl TorrentProtocol {
             total,
             paths,
             root_path: layout.root_path,
+            stall: self.stall,
         }
         .follow(resuming)
         .await
@@ -365,6 +379,7 @@ struct Active<'a> {
     /// Every file of the torrent.
     paths: Vec<PathBuf>,
     root_path: PathBuf,
+    stall: Duration,
 }
 
 impl Active<'_> {
@@ -374,6 +389,7 @@ impl Active<'_> {
         let ctx = self.ctx;
         let mut checking = true;
         let mut seeding_since: Option<Instant> = None;
+        let mut stall = Stall::new(self.stall);
         loop {
             tokio::select! {
                 biased;
@@ -429,6 +445,13 @@ impl Active<'_> {
                 ctx.progress.set_upload_bps(Some(up));
             }
             if !stats.finished {
+                let connected = stats
+                    .live
+                    .as_ref()
+                    .is_some_and(|l| l.snapshot.peer_stats.live > 0);
+                if stall.is_over(connected, Instant::now()) {
+                    self.search_peers_again().await;
+                }
                 continue;
             }
             if seeding_since.is_none() {
@@ -453,6 +476,20 @@ impl Active<'_> {
                     path: self.root_path,
                 });
             }
+        }
+    }
+
+    /// Restarts the torrent's networking: known peers are tried at once, and trackers and
+    /// the DHT are asked again. librqbit backs off from a peer that failed once for 10 s,
+    /// then minutes, up to an hour, which stalls a torrent with few peers. Pieces are kept.
+    async fn search_peers_again(&self) {
+        tracing::info!(id = %self.ctx.task.id, "no peers connected: searching again");
+        let result = match self.session.pause(self.handle).await {
+            Ok(()) => self.session.unpause(self.handle).await,
+            Err(e) => Err(e),
+        };
+        if let Err(e) = result {
+            tracing::warn!(%e, "could not restart the torrent");
         }
     }
 
@@ -537,6 +574,34 @@ fn run_error(text: Option<String>) -> ProtocolError {
         }
     } else {
         torrent_err(text)
+    }
+}
+
+/// Decides when a torrent without peers should search again.
+struct Stall {
+    wait: Duration,
+    /// Since when no peer has been connected.
+    since: Option<Instant>,
+}
+
+impl Stall {
+    const fn new(wait: Duration) -> Self {
+        Self { wait, since: None }
+    }
+
+    /// Feeds the current situation; `true` when it is time to search again.
+    fn is_over(&mut self, connected: bool, now: Instant) -> bool {
+        if connected {
+            self.since = None;
+            return false;
+        }
+        let since = *self.since.get_or_insert(now);
+        if now.duration_since(since) < self.wait {
+            return false;
+        }
+        self.since = Some(now);
+        self.wait = (self.wait * 2).min(MAX_STALL);
+        true
     }
 }
 
@@ -635,6 +700,25 @@ mod tests {
             ProtocolError::Torrent(_)
         ));
         assert!(run_error(None).to_string().contains("unknown"));
+    }
+
+    #[test]
+    fn stalls_are_noticed_at_growing_intervals() {
+        let start = Instant::now();
+        let at = |s| start + Duration::from_secs(s);
+        let mut stall = Stall::new(Duration::from_secs(60));
+        assert!(!stall.is_over(false, at(0)));
+        assert!(!stall.is_over(false, at(59)));
+        assert!(!stall.is_over(true, at(60)), "a peer connected");
+        assert!(!stall.is_over(false, at(61)));
+        assert!(stall.is_over(false, at(121)));
+        assert!(!stall.is_over(false, at(240)), "now after two minutes");
+        assert!(stall.is_over(false, at(241)));
+        let mut now = 241;
+        for _ in 0..20 {
+            now += MAX_STALL.as_secs();
+            assert!(stall.is_over(false, at(now)), "never less often than that");
+        }
     }
 
     #[test]

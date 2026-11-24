@@ -31,6 +31,7 @@ Format: one `## [version] - date` heading per release, then `### Added`, `### Ch
 - A full disk is reported clearly, and the download can be retried after making room.
 - Automatic retries now also cover connecting, and servers without resume support.
 - A server that never answers no longer blocks a download: it can be paused, and times out.
+- A torrent with few peers no longer waits up to an hour to try them again.
 - A download whose state could not be saved no longer looks as if it were still running.
 - A resumed torrent looked as if it downloaded very fast and then started over. The fast
   part was the check of existing data.
