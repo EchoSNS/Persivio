@@ -24,7 +24,7 @@ Where the manifest is read from depends on the build:
 | Build | Manifest URL | Configured in |
 |---|---|---|
 | Local channel (now) | `http://127.0.0.1:8787/latest.json` | `apps/desktop/src-tauri/tauri.local.conf.json` |
-| Online (later) | `https://github.com/EchoSNS/Persivio/releases/latest/download/latest.json` | `apps/desktop/src-tauri/tauri.conf.json` |
+| Online (later) | `https://github.com/EchoSNS/persivio-releases/releases/latest/download/latest.json` | `apps/desktop/src-tauri/tauri.conf.json` |
 
 Plain `http://` is acceptable for the local channel because it never leaves this
 computer and the signature check still protects the installer. Online builds use
@@ -32,7 +32,7 @@ HTTPS.
 
 ## One-time setup (done)
 
-- **Signing key:** `C:\Users\yvans\.tauri\persivio-local.key` (private, no password) and
+- **Signing key:** `%USERPROFILE%\.tauri\persivio-local.key` (private, no password) and
   `persivio-local.key.pub` (public). The public key is in `tauri.local.conf.json`.
   - **Never commit the private key, or copy it into the repository.** Anyone who has it
     can sign "updates" that installed copies will accept.
@@ -96,8 +96,8 @@ be stopped when you are not updating. `dist-updates/` is ignored by git.
 
 ## Online updates
 
-Prepared in version 0.4.0: see [release.md](release.md). It needs a decision (where the
-releases are public) and a release signing key.
+See [release.md](release.md). Online releases use another key, so a copy installed from the
+local channel must be replaced once by hand with the first online installer.
 
 ## Troubleshooting
 

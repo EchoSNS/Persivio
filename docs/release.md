@@ -17,27 +17,32 @@ Pushing a tag `vX.Y.Z` starts `.github/workflows/release.yml`:
    | macOS 11+ | universal `.dmg` (Apple silicon and Intel) |
    | Linux | `.AppImage` and `.deb` (built on Ubuntu 22.04) |
 
-   With a signing key, also the update packages, their `.sig` files and `latest.json`.
-3. **finish** adds the browser extension and `SHA256SUMS.txt`.
+   With a signing key, also the update packages and their `.sig` files.
+3. **finish** adds the browser extension and `SHA256SUMS.txt`. Every installer contains the
+   license notices of the software inside (`scripts/third-party-notices.mjs`).
 
-**Nothing is public until you publish the draft** on the Releases page. Installed copies
-see the update from that moment.
+The draft stays in the private repository. Then, from your computer:
+
+```powershell
+node scripts/publish-release.mjs vX.Y.Z             # checks everything, makes a public draft
+node scripts/publish-release.mjs vX.Y.Z --publish   # updates go out from this moment
+```
+
+The first command compares checksums, checks that every package is signed for this version
+with the key the app trusts, and writes `latest.json` with the public addresses.
 
 To try the builds without a release: Actions → Release → **Run workflow**. The installers
 appear as artifacts of the run.
 
 ## One-time setup
 
-### 0. Decide where releases live
+### 0. Where releases live
 
-The repository is **private**, and installed copies have no GitHub login, so they cannot
-read `releases/latest/download/latest.json`. Choose one:
+The source repository is **private**, and installed copies have no GitHub login. Installers
+and `latest.json` therefore go to a second, **public** repository that contains no source:
+[persivio-releases](https://github.com/EchoSNS/persivio-releases). It is free.
 
-| Option | Effect |
-|---|---|
-| Make the repository public | Simplest: everything works as configured. The code becomes public. |
-| A second, public repository for releases only | The code stays private. `release.yml` needs a token for that repository, and the endpoint in `tauri.conf.json` changes. |
-| Keep the local channel | Nothing to do; updates work on this computer only. |
+When the source becomes public, this can stay as it is.
 
 ### 1. Create the release signing key
 
@@ -52,12 +57,24 @@ Choose a strong password. Then:
 
 1. Copy the contents of `persivio-release.key.pub` into `tauri.conf.json` →
    `plugins.updater.pubkey`, and commit. (`tauri.local.conf.json` keeps the local key.)
-2. Add two repository secrets (GitHub asks for the value; it is not shown on screen):
+2. Give the build two **secrets**. A secret is a locked note in the repository's settings:
+   the release workflow can use it, but nobody can read it back, not even you. They are
+   needed because GitHub's computers build and sign the release. In the project folder:
 
    ```powershell
-   Get-Content $env:USERPROFILE\.tauri\persivio-release.key -Raw | gh secret set TAURI_SIGNING_PRIVATE_KEY
-   gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+   # The key file. Nothing is shown; "Set Actions secret" means it worked.
+   Get-Content $env:USERPROFILE\.tauri\persivio-release.key -Raw | gh secret set TAURI_SIGNING_PRIVATE_KEY --repo EchoSNS/Persivio
+
+   # The password: it asks "Paste your secret". Type the password you chose, press Enter.
+   # The characters stay invisible. That is normal.
+   gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo EchoSNS/Persivio
+
+   # Check: lists the two names (never the values).
+   gh secret list --repo EchoSNS/Persivio
    ```
+
+   Or in the browser: the private repository → Settings → Secrets and variables → Actions →
+   **New repository secret**, once per secret.
 
 3. Store the key and its password in a password manager. **If they are lost, installed
    copies can never be updated again. If they leak, someone else can sign updates.**
@@ -70,6 +87,10 @@ online release by hand once.
 This is separate from the update signature. Without it, Windows SmartScreen says "Unknown
 publisher" and macOS asks for confirmation in System Settings. **The publisher name in the
 installer is only text; only a certificate makes Windows show a verified publisher.**
+
+**Free for open source**: [SignPath Foundation](https://signpath.org/terms) signs projects
+whose source is public and openly licensed; its name is then shown as the publisher. This is
+only possible once the source repository is public.
 
 **Windows**: a code-signing certificate, or Azure Artifact Signing. Configure Tauri's
 `bundle.windows.signCommand` (Azure) or `certificateThumbprint` (certificate store) in
@@ -90,8 +111,9 @@ to start it at all.
 3. `node scripts/release-check.mjs`
 4. Commit, push, wait for CI.
 5. `git tag vX.Y.Z` and `git push origin vX.Y.Z`
-6. When the workflow is done: download an installer from the draft, install it, try it.
-7. Publish the draft.
+6. When the workflow is done: `node scripts/publish-release.mjs vX.Y.Z`, download an installer
+   from the public draft, install it, try it.
+7. `node scripts/publish-release.mjs vX.Y.Z --publish`
 
-If something is wrong, delete the draft and the tag, fix it, and tag again. After
+If something is wrong, delete both drafts and the tag, fix it, and tag again. After
 publishing, never replace files: release a new version.

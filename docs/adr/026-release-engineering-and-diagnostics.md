@@ -40,3 +40,10 @@
 - Metadata that arrives from peers (magnet links) is parsed inside librqbit and does not
   pass `bencode::check`. Its nesting is limited there; a panic fails only that download.
 - Installers are not code-signed, so systems warn. `docs/release.md` explains how to add it.
+
+## Addendum: public releases repository (2026-11-25)
+The source stays private for now, so releases are published in `persivio-releases`. A
+workflow could write there only with a personal access token stored as a secret. Instead, a
+person runs `scripts/publish-release.mjs` with their own GitHub login: nothing is stored, and
+publishing stays a human step. The script verifies checksums, the signing key and the signed
+version before it creates anything. Installers include third-party license notices.

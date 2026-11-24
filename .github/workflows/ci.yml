@@ -34,6 +34,8 @@ jobs:
       - run: cargo fmt --all -- --check
       - name: Versions and changelog agree
         run: node scripts/release-check.mjs
+      - name: Update manifest tests
+        run: node --test scripts/lib/*.test.mjs
 
   deny:
     name: cargo-deny

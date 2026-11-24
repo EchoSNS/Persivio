@@ -1,7 +1,9 @@
 name: Release
 
-# - A tag `vX.Y.Z` builds installers for every OS into a DRAFT release. Nothing is public
-#   until a person publishes the draft (docs/release.md).
+# - A tag `vX.Y.Z` builds installers for every OS into a DRAFT release here, in the private
+#   repository. A person copies it to the public releases repository and publishes it there
+#   (scripts/publish-release.mjs, docs/release.md), so no token with access to another
+#   repository is stored anywhere.
 # - Started by hand, it builds the same installers as workflow artifacts, without a release.
 #
 # Actions are pinned to commits: this workflow handles the update signing key. No build
@@ -83,12 +85,14 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
       # Without a key: installers, but no update packages.
+      - name: License notices of everything inside
+        run: node scripts/third-party-notices.mjs
       - name: Build (dry run)
         if: env.RELEASE != 'true'
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         with:
           projectPath: apps/desktop
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.notices.conf.json
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: "[name]_[version]_[platform]_[arch]_[bundle]"
       - name: Build and upload to the draft
@@ -104,9 +108,9 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseDraft: true
-          uploadUpdaterJson: ${{ needs.prepare.outputs.signed == 'true' }}
-          updaterJsonPreferNsis: true
-          args: ${{ matrix.args }} ${{ needs.prepare.outputs.signed == 'true' && '--config src-tauri/tauri.release.conf.json' || '' }}
+          # publish-release.mjs writes the manifest, with the public addresses.
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }} --config src-tauri/tauri.notices.conf.json ${{ needs.prepare.outputs.signed == 'true' && '--config src-tauri/tauri.release.conf.json' || '' }}
 
   finish:
     needs: [prepare, build]

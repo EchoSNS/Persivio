@@ -95,9 +95,9 @@
   "plugins": {
     "updater": {
       "requireSignedVersion": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGNTM0NzE0RTkzMjM3MDAKUldRQU56THBGRWRUSDA2S1ZMVWdUMXVHS1Y2Wml5eDRyQUdXV1Jzck05RWg0TVpHcWE1OTM1LysK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFGRDZCMzU0Mzc5QUQ4MzcKUldRMzJKbzNWTFBXcnhUZnJrZUN4MS9rN3JIMVF3SFNKMllrellLKzAvZURJb1llOTZUWmE3WTIK",
       "endpoints": [
-        "https://github.com/EchoSNS/Persivio/releases/latest/download/latest.json"
+        "https://github.com/EchoSNS/persivio-releases/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"
