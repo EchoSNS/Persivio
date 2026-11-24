@@ -412,3 +412,100 @@ async fn temporary_failures_are_retried_in_every_phase() {
     }
     e.shutdown().await;
 }
+
+/// Answers every request with headers that promise `size` bytes, and little data.
+async fn boasting_server(size: u64, ranges: bool) -> (String, tokio::task::JoinHandle<()>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/huge.bin", listener.local_addr().unwrap());
+    let handle = tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let head = if ranges {
+                    format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/{size}\r\nContent-Length: 1\r\nETag: \"x\"\r\n\r\n"
+                    )
+                } else {
+                    format!("HTTP/1.1 200 OK\r\nContent-Length: {size}\r\n\r\n")
+                };
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(b"x").await;
+                let _ = socket.read(&mut buf).await; // until the client hangs up
+            });
+        }
+    });
+    (url, handle)
+}
+
+/// A download that cannot fit is refused up front: several connections, one connection,
+/// and torrents. Nothing is left on disk.
+#[tokio::test(flavor = "multi_thread")]
+async fn downloads_that_cannot_fit_are_refused_before_writing() {
+    const PETABYTE: u64 = 1 << 50;
+    let dir = tempfile::tempdir().unwrap();
+    let e = Engine::start(EngineConfig::new(dir.path().join("db")))
+        .await
+        .unwrap();
+    e.set_settings(Settings {
+        torrent: TorrentSettings {
+            dht: false,
+            upnp: false,
+            ..TorrentSettings::default()
+        },
+        ..Settings::default()
+    })
+    .await
+    .unwrap();
+
+    // 64 TiB in 32768 pieces of 2 GiB: valid metadata, impossible to store.
+    let pieces = 32_768usize;
+    let mut torrent = format!(
+        "d4:infod6:lengthi{}e4:name8:huge.bin12:piece lengthi{}e6:pieces{}:",
+        pieces as u64 * (1u64 << 31),
+        1u64 << 31,
+        pieces * 20
+    )
+    .into_bytes();
+    torrent.resize(torrent.len() + pieces * 20, 0xAB);
+    torrent.extend_from_slice(b"ee");
+
+    let (segmented, s1) = boasting_server(PETABYTE, true).await;
+    let (single, s2) = boasting_server(PETABYTE, false).await;
+    for (name, source) in [
+        ("segmented", http(&segmented)),
+        ("single", http(&single)),
+        ("torrent", Source::TorrentFile { bytes: torrent }),
+    ] {
+        let dest = dir.path().join(name);
+        let id = e.add(TaskSpec::new(source, &dest)).await.unwrap();
+        let t = wait_for(&e, id, &[TaskStateKind::Failed, TaskStateKind::Completed]).await;
+        assert_disk_full(&t);
+        let used: u64 = std::fs::read_dir(&dest)
+            .unwrap()
+            .map(|f| f.unwrap().metadata().unwrap().len())
+            .sum();
+        assert_eq!(used, 0, "{name}: nothing was written");
+    }
+    e.shutdown().await;
+    s1.abort();
+    s2.abort();
+}
+
+/// The operating system's own "disk full" error is recognized.
+#[cfg(windows)]
+#[test]
+fn the_real_windows_disk_full_error_is_recognized() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = std::fs::File::create(dir.path().join("f")).unwrap();
+    // Larger than the volume: NTFS refuses at once, nothing is allocated.
+    let error = file.set_len(1 << 43).unwrap_err();
+    assert!(
+        matches!(
+            pv_core::ProtocolError::from(error),
+            pv_core::ProtocolError::DiskFull { .. }
+        ),
+        "not recognized"
+    );
+}
