@@ -28,7 +28,7 @@
    much rather than too little. Saving uses the system dialog from Rust, so the webview
    still has no file access.
 9. **Fuzzing** moved to its own workflow: weekly, by hand, and when a parser changes. The
-   repository is private and its build minutes are limited.
+   repository was private then, with limited build minutes.
 10. **`.torrent` bytes are checked before librqbit parses them** (`bencode::check`). Found
     by fuzzing: numbers overflow in its parser, which panics in builds with overflow checks
     and wraps in release builds, and a piece length of zero, which it divides by (a panic in
@@ -42,7 +42,7 @@
 - Installers are not code-signed, so systems warn. `docs/release.md` explains how to add it.
 
 ## Addendum: public releases repository (2026-11-25)
-The source stays private for now, so releases are published in `persivio-releases`. A
+The source was private at this point, so releases are published in `persivio-releases`. A
 workflow could write there only with a personal access token stored as a secret. Instead, a
 person runs `scripts/publish-release.mjs` with their own GitHub login: nothing is stored, and
 publishing stays a human step. The script verifies checksums, the signing key and the signed

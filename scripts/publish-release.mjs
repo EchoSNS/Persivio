@@ -1,4 +1,4 @@
-// Copies a finished draft release from the private source repository to the public
+// Copies a finished draft release from the source repository to the public
 // releases repository, as a draft there, with the updater manifest. Uses your own GitHub
 // CLI login: no token is stored anywhere. See docs/release.md.
 //

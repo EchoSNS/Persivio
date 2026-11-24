@@ -4,7 +4,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** version 0.5.0, in personal use on Windows. macOS and Linux builds are made and
+> **Status:** version 0.5.1, in personal use on Windows. macOS and Linux builds are made and
 > tested automatically but have not been used day to day. See [CHANGELOG.md](CHANGELOG.md),
 > [known limits](docs/hardening-report.md#not-verified) and [how to release](docs/release.md).
 
@@ -28,6 +28,12 @@ Tauri v2 + Svelte 5 desktop UI.
 - **Private by design**: no accounts, no telemetry. Cookies go only to their own site and are
   erased when a download ends.
 - **Signed updates** with release notes. A command-line version is included.
+
+## Download
+
+Installers for Windows, macOS and Linux are on the
+**[releases page](https://github.com/EchoSNS/persivio-releases/releases/latest)**. New to it?
+Read the [user guide](docs/user-guide.md).
 
 ## Responsible use
 

@@ -13,7 +13,7 @@ and other Chromium browsers; Firefox 128+ is supported by the same files.
 4. Click **Load unpacked** and choose this `extension` folder.
 5. Click **Details → Extension options** (or right-click the Persivio icon → Options).
 6. Paste the token, click **Save**, then **Test connection**. It should say
-   "Connected to Persivio 0.5.0."
+   "Connected to Persivio 0.5.1."
 
 Brave keeps an unpacked extension until you remove it. After pulling new code, click
 the reload icon on the extension's card.

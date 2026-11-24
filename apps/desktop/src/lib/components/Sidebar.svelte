@@ -55,9 +55,7 @@
 	aria-label="Download lists"
 >
 	<div class="flex items-center gap-2 px-4 py-3.5">
-		<span class="grid size-7 place-items-center rounded-xl border border-white/30 bg-linear-to-br from-teal-500 to-cyan-600 text-white shadow-md shadow-teal-600/30" aria-hidden="true">
-			<Download size={14} strokeWidth={2.5} />
-		</span>
+		<img src="/persivio-logo.svg" alt="" class="size-7 drop-shadow-md" width="28" height="28" />
 		<span class="text-sm font-semibold tracking-tight">Persivio</span>
 	</div>
 

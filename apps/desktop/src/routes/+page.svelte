@@ -250,6 +250,8 @@
 	}
 
 	function onKeydown(e: KeyboardEvent) {
+		// An open dropdown handles its own keys (Escape closes it).
+		if (e.target instanceof HTMLOptionElement) return;
 		const modalOpen =
 			add.open || removing !== null || whatsNew !== null || update !== null || menu !== null;
 		if (modalOpen) return; // the <dialog> handles its own keys (Escape closes it)
@@ -402,10 +404,14 @@
 					/>
 				</div>
 				<select
-					class="input w-32 rounded-full py-1.5 text-xs"
+					class="input w-36 shrink-0 rounded-full py-1.5 text-xs"
 					aria-label="Sort downloads"
 					bind:value={sort}
-					onchange={() => saveSort(sort)}
+					onchange={() => {
+						saveSort(sort);
+						// Once the list has closed and given the focus back: shortcuts work again.
+						setTimeout(() => list?.focus(), 0);
+					}}
 				>
 					{#each SORTS as s (s.key)}<option value={s.key}>{s.label}</option>{/each}
 				</select>

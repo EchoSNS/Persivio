@@ -21,7 +21,8 @@ Pushing a tag `vX.Y.Z` starts `.github/workflows/release.yml`:
 3. **finish** adds the browser extension and `SHA256SUMS.txt`. Every installer contains the
    license notices of the software inside (`scripts/third-party-notices.mjs`).
 
-The draft stays in the private repository. Then, from your computer:
+This draft stays in the source repository, where only its owner sees it. Then, from your
+computer, **once per release** (not once per computer):
 
 ```powershell
 node scripts/publish-release.mjs vX.Y.Z             # checks everything, makes a public draft
@@ -38,11 +39,13 @@ appear as artifacts of the run.
 
 ### 0. Where releases live
 
-The source repository is **private**, and installed copies have no GitHub login. Installers
+The source repository was private when this was set up, and installed copies have no GitHub
+login. Installers
 and `latest.json` therefore go to a second, **public** repository that contains no source:
 [persivio-releases](https://github.com/EchoSNS/persivio-releases). It is free.
 
-When the source becomes public, this can stay as it is.
+The source is public since 2026-11-25. The second repository stays, because installed copies
+look for updates there, and because it lets a release be tried before it is announced.
 
 ### 1. Create the release signing key
 
@@ -73,7 +76,7 @@ Choose a strong password. Then:
    gh secret list --repo EchoSNS/Persivio
    ```
 
-   Or in the browser: the private repository → Settings → Secrets and variables → Actions →
+   Or in the browser: the source repository → Settings → Secrets and variables → Actions →
    **New repository secret**, once per secret.
 
 3. Store the key and its password in a password manager. **If they are lost, installed
@@ -89,8 +92,8 @@ publisher" and macOS asks for confirmation in System Settings. **The publisher n
 installer is only text; only a certificate makes Windows show a verified publisher.**
 
 **Free for open source**: [SignPath Foundation](https://signpath.org/terms) signs projects
-whose source is public and openly licensed; its name is then shown as the publisher. This is
-only possible once the source repository is public.
+whose source is public and openly licensed; its name is then shown as the publisher. The
+source is public, so Persivio can apply.
 
 **Windows**: a code-signing certificate, or Azure Artifact Signing. Configure Tauri's
 `bundle.windows.signCommand` (Azure) or `certificateThumbprint` (certificate store) in

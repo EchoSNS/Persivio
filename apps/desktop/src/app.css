@@ -158,6 +158,9 @@ body {
 	.input option {
 		@apply bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100;
 	}
+	select.input {
+		@apply cursor-default;
+	}
 	.label {
 		@apply mb-1 block text-xs font-medium text-(--muted);
 	}
@@ -226,6 +229,116 @@ body {
 	}
 }
 
+/*
+ * Dropdowns (ADR-024). Where the engine can style a native <select> (Chromium, so WebView2)
+ * its list becomes a glass panel; everywhere else it stays the system's own list. Keyboard
+ * and screen reader behavior is the browser's either way.
+ */
+@supports (appearance: base-select) {
+	select.input,
+	select.input::picker(select) {
+		appearance: base-select;
+	}
+	select.input {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding-right: 0.75rem;
+		transition: background-color 0.15s;
+	}
+	select.input:hover {
+		background: var(--control-hover);
+	}
+	select.input::picker-icon {
+		content: '';
+		flex: none;
+		width: 0.4rem;
+		height: 0.4rem;
+		margin-top: -0.2rem;
+		border: solid var(--muted);
+		border-width: 0 1.5px 1.5px 0;
+		rotate: 45deg;
+		transition:
+			rotate 0.18s ease-out,
+			margin-top 0.18s ease-out;
+	}
+	select.input:open::picker-icon {
+		rotate: 225deg;
+		margin-top: 0.2rem;
+	}
+	select.input::picker(select) {
+		box-sizing: border-box;
+		/* Below the field when it fits there, not wherever there is more room. */
+		position-try-order: normal;
+		min-width: max(anchor-size(width), 9rem);
+		max-height: min(20rem, 60vh);
+		margin-block: 0.375rem;
+		padding: 0.375rem;
+		overflow-y: auto;
+		color: inherit;
+		font-size: 0.8125rem;
+		background: var(--glass-fill-strong);
+		border: 1px solid var(--glass-border);
+		border-radius: 1rem;
+		box-shadow:
+			inset 0 1px 0 var(--glass-shine),
+			0 0 0 1px var(--glass-edge),
+			var(--glass-shadow);
+		-webkit-backdrop-filter: var(--glass-filter);
+		backdrop-filter: var(--glass-filter);
+		opacity: 0;
+		translate: 0 -4px;
+		transition:
+			opacity 0.14s ease-out,
+			translate 0.14s ease-out,
+			display 0.14s allow-discrete,
+			overlay 0.14s allow-discrete;
+	}
+	select.input:open::picker(select) {
+		opacity: 1;
+		translate: 0 0;
+	}
+	@starting-style {
+		select.input:open::picker(select) {
+			opacity: 0;
+			translate: 0 -4px;
+		}
+	}
+	select.input option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.625rem;
+		color: inherit;
+		background: transparent;
+		border-radius: 0.625rem;
+		outline: none;
+	}
+	select.input option:hover,
+	select.input option:focus-visible {
+		background: var(--control-hover);
+	}
+	select.input option:focus-visible {
+		box-shadow: inset 0 0 0 1.5px var(--ring);
+	}
+	select.input option:checked {
+		font-weight: 600;
+	}
+	/* The check mark of the chosen option, on the right. */
+	select.input option::checkmark {
+		order: 1;
+		margin-left: auto;
+		content: '';
+		flex: none;
+		width: 0.3rem;
+		height: 0.6rem;
+		border: solid var(--ring);
+		border-width: 0 2px 2px 0;
+		rotate: 45deg;
+	}
+}
+
 @keyframes slide {
 	from {
 		transform: translateX(-100%);
@@ -277,7 +390,8 @@ dialog.modal::backdrop {
 	.glass,
 	.panel,
 	.btn,
-	.input {
+	.input,
+	select.input::picker(select) {
 		border: 1px solid CanvasText;
 	}
 }

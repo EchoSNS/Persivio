@@ -6,6 +6,14 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
+## [0.5.1] - 2026-11-25
+
+### Changed
+- Dropdown lists match the rest of the interface, with a check mark on the chosen entry.
+
+### Added
+- A user guide, linked from the project page.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added

@@ -63,6 +63,8 @@ export function isTextField(target: EventTarget | null): boolean {
 	if (!(target instanceof HTMLElement)) return false;
 	if (target.isContentEditable) return true;
 	if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+	// In an open, styled dropdown the focus is on the option.
+	if (target instanceof HTMLOptionElement) return true;
 	if (target instanceof HTMLInputElement) {
 		return !['checkbox', 'radio', 'button', 'submit', 'range'].includes(target.type);
 	}

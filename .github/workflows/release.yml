@@ -1,7 +1,7 @@
 name: Release
 
-# - A tag `vX.Y.Z` builds installers for every OS into a DRAFT release here, in the private
-#   repository. A person copies it to the public releases repository and publishes it there
+# - A tag `vX.Y.Z` builds installers for every OS into a DRAFT release here, visible only
+#   to the repository's owner. A person copies it to the public releases repository and publishes it there
 #   (scripts/publish-release.mjs, docs/release.md), so no token with access to another
 #   repository is stored anywhere.
 # - Started by hand, it builds the same installers as workflow artifacts, without a release.

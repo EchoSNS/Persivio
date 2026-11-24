@@ -1,7 +1,7 @@
 name: Fuzz
 
 # 10 minutes per target: weekly, by hand, and when a fuzzed parser changes. Not on every
-# push: the repository's free build minutes are limited.
+# push: 50 minutes of machine time would delay everything else.
 on:
   schedule:
     - cron: "17 3 * * 1"

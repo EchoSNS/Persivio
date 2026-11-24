@@ -46,6 +46,12 @@ cargo +nightly fuzz run content_range   # optional, needs cargo-fuzz (runs in CI
 Desktop app (`apps/desktop`): `npm run check`, `npm test`, `npm run tauri dev`. Build the
 frontend once (`npm run build`) before compiling the workspace.
 
+## Reporting problems
+
+- Bugs: open an issue. Settings → Diagnostics → View report has what is needed, without
+  personal data.
+- Security problems: see [SECURITY.md](SECURITY.md), please not in a public issue.
+
 ## Definition of done
 
 fmt, clippy and tests pass; new behavior has tests; docs and ADRs are updated if needed.
