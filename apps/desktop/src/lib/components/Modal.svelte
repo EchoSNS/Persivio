@@ -5,6 +5,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { X } from '@lucide/svelte';
+	import WindowControls from './WindowControls.svelte';
 
 	type Props = {
 		open: boolean;
@@ -23,8 +24,9 @@
 		if (!dialog) return;
 		if (open && !dialog.open) {
 			dialog.showModal();
-			// Without this the browser focuses the first control, the Close button.
-			dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+			// Without this the browser focuses the first control: Minimize.
+			const first = dialog.querySelector<HTMLElement>('[data-autofocus]');
+			(first ?? dialog.querySelector<HTMLElement>('[data-panel]'))?.focus();
 		}
 		if (!open && dialog.open) dialog.close();
 	});
@@ -32,7 +34,7 @@
 
 <dialog
 	bind:this={dialog}
-	class="modal glass glass-strong {wide ? 'w-[min(52rem,calc(100vw-2rem))]' : ''}"
+	class="modal"
 	aria-labelledby={titleId}
 	onclose={onclose}
 	onclick={(e) => {
@@ -41,19 +43,22 @@
 	}}
 >
 	{#if open}
-		<div class="flex max-h-[85vh] flex-col">
+		<div class="absolute inset-x-0 top-0 flex h-11 justify-end" data-tauri-drag-region>
+			<WindowControls />
+		</div>
+		<div class="modal-panel glass glass-strong {wide ? 'modal-wide' : ''}" data-panel tabindex="-1">
 			<header
-				class="flex items-center justify-between border-b border-(--line) px-5 py-3.5"
+				class="flex items-center justify-between px-6 pt-5 pb-2"
 			>
-				<h2 id={titleId} class="text-sm font-semibold">{title}</h2>
+				<h2 id={titleId} class="text-base font-semibold">{title}</h2>
 				<button class="icon-btn" aria-label="Close" onclick={onclose}><X size={16} /></button>
 			</header>
-			<div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+			<div class="min-h-0 flex-1 overflow-y-auto px-6 pt-3 {footer ? 'pb-3' : 'pb-6'}">
 				{@render children()}
 			</div>
 			{#if footer}
 				<footer
-					class="flex justify-end gap-2 border-t border-(--line) px-5 py-3.5"
+					class="flex justify-end gap-2 px-6 pt-2 pb-5"
 				>
 					{@render footer()}
 				</footer>

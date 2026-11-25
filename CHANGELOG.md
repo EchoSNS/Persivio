@@ -6,12 +6,18 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
-## [0.5.2] - 2026-11-25
+## [0.6.0] - 2026-11-25
 
 ### Security
 - A crafted magnet link can no longer use up the memory and close Persivio.
 
+### Changed
+- A calmer window: one continuous surface instead of panels, and on Windows its own title bar.
+- The Windows installer looks like the app, and updates without asking to uninstall first.
+- Total speeds moved to the foot of the sidebar.
+
 ### Fixed
+- Windows keeps showing the old icon in the taskbar after an update.
 - A malformed magnet link is refused with a clear message.
 - Magnet links with a lower-case base32 hash, or starting with `MAGNET:`, work.
 

@@ -8,6 +8,7 @@ Download the file for your system from the
 | System | File | Note |
 |---|---|---|
 | Windows 10, 11 | `…_x64-setup.exe` | No administrator rights needed. "Windows protected your PC": **More info → Run anyway**. The installer is not code-signed yet. |
+| Windows, managed PCs | `…_x64_en-US.msi` | For IT departments: for all accounts, needs administrator rights. The same app; do not install both. |
 | macOS 11 or newer | `…_universal.dmg` | The app is not notarized yet: after the first try, allow it under System Settings → Privacy & Security. |
 | Linux | `….AppImage` or `….deb` | Make the AppImage executable first. |
 

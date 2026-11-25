@@ -13,10 +13,10 @@
       {
         "label": "main",
         "title": "Persivio",
-        "width": 1100,
-        "height": 720,
-        "minWidth": 720,
-        "minHeight": 480,
+        "width": 1120,
+        "height": 740,
+        "minWidth": 760,
+        "minHeight": 500,
         "visible": false,
         "dragDropEnabled": false
       }
@@ -61,7 +61,14 @@
     "longDescription": "Fast downloads over several connections, BitTorrent and magnet links, a queue, speed limits and browser integration.",
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "installer/persivio.nsh"
+      },
+      "wix": {
+        "bannerPath": "installer/msi-banner.bmp",
+        "dialogImagePath": "installer/msi-dialog.bmp"
       }
     },
     "macOS": {

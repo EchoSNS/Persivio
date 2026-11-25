@@ -1,6 +1,6 @@
 # ADR-024: Glass theme
 
-- **Status:** Accepted (extends ADR-019)
+- **Status:** Accepted (extends ADR-019; ADR-027 limits glass to what floats)
 - **Date:** 2026-11-24
 
 ## Context

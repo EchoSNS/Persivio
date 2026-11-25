@@ -13,7 +13,7 @@ Pushing a tag `vX.Y.Z` starts `.github/workflows/release.yml`:
 
    | System | Files |
    |---|---|
-   | Windows | `*-setup.exe` (NSIS, for one user) and `.msi` |
+   | Windows | `*-setup.exe` (NSIS, for one user) and `.msi` (all users, for IT departments) |
    | macOS 11+ | universal `.dmg` (Apple silicon and Intel) |
    | Linux | `.AppImage` and `.deb` (built on Ubuntu 22.04) |
 
@@ -28,6 +28,9 @@ computer, **once per release** (not once per computer):
 node scripts/publish-release.mjs vX.Y.Z             # checks everything, makes a public draft
 node scripts/publish-release.mjs vX.Y.Z --publish   # updates go out from this moment
 ```
+
+The release page gets a table that explains every file (`scripts/lib/downloads.mjs`); a new
+kind of file must be described there first. `--describe` rewrites it on a published release.
 
 The first command compares checksums, checks that every package is signed for this version
 with the key the app trusts, and writes `latest.json` with the public addresses.

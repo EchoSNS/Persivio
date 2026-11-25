@@ -71,10 +71,10 @@
 </script>
 
 <aside
-	class="glass enter-up flex w-[21rem] shrink-0 flex-col overflow-hidden rounded-3xl"
+	class="enter-up flex w-[20rem] shrink-0 flex-col overflow-hidden"
 	aria-label="Download details"
 >
-	<header class="flex items-start gap-2 border-b border-(--line) px-4 py-3">
+	<header class="flex items-start gap-2 px-5 pt-2 pb-2">
 		<div class="min-w-0 flex-1">
 			<h2 class="text-sm font-semibold break-words">{task.name}</h2>
 			<div class="mt-1 flex items-center gap-2"><StateBadge state={task.state} /></div>
@@ -82,7 +82,7 @@
 		<button class="icon-btn" aria-label="Close details" onclick={onclose}><X size={16} /></button>
 	</header>
 
-	<div class="flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">
+	<div class="flex-1 space-y-6 overflow-y-auto px-5 py-3 text-sm">
 		{#if task.state.type === 'failed'}
 			<p class="rounded-xl bg-red-500/15 p-2.5 text-xs text-red-800 dark:text-red-200">
 				{task.state.message}
@@ -127,7 +127,7 @@
 
 		{#if detail && task.kind === 'torrent' && detail.files.length > 0}
 			<section aria-label="Files" class="space-y-2">
-				<h3 class="text-xs font-semibold text-(--muted) uppercase">Files</h3>
+				<h3 class="text-xs font-medium text-(--muted)">Files</h3>
 				<FileSelector
 					files={detail.files}
 					selected={selection}
@@ -195,7 +195,7 @@
 	</div>
 
 	{#if waiting || finished}
-		<footer class="flex flex-wrap gap-2 border-t border-(--line) px-4 py-3">
+		<footer class="flex flex-wrap gap-2 px-5 py-3">
 			{#if finished}
 				<button class="btn" onclick={() => store.reveal(task.id)}><FolderOpen size={14} /> Show in folder</button>
 			{/if}

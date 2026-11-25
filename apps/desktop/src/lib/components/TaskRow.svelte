@@ -94,7 +94,7 @@
 	role="option"
 	aria-selected={selected}
 	tabindex="-1"
-	class="group mx-2 flex h-[calc(100%-4px)] cursor-default items-center gap-3 rounded-2xl px-3 transition-colors duration-100 select-none
+	class="group flex h-[calc(100%-4px)] cursor-default items-center gap-3.5 rounded-2xl px-3 transition-colors duration-100 select-none
 		{selected ? 'bg-(--row-selected)' : 'hover:bg-(--row-hover)'}
 		{focused ? 'outline-2 -outline-offset-2 outline-(--ring)/70' : ''}"
 	onclick={onselect}
@@ -103,7 +103,7 @@
 	onkeydown={() => {}}
 >
 	<span
-		class="grid size-9 shrink-0 place-items-center rounded-xl border border-(--line) bg-(--control) text-(--muted)"
+		class="grid size-10 shrink-0 place-items-center rounded-xl bg-(--control) text-(--muted)"
 		aria-hidden="true"
 	>
 		{#if task.kind === 'torrent'}<Magnet size={16} />{:else}<Globe size={16} />{/if}

@@ -33,7 +33,7 @@
 	import Modal from '#lib/components/Modal.svelte';
 	import SettingsPage from '#lib/components/SettingsPage.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
-	import StatusBar from '#lib/components/StatusBar.svelte';
+	import WindowControls from '#lib/components/WindowControls.svelte';
 	import TaskList from '#lib/components/TaskList.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import { actionFor, isTextField } from '#lib/shortcuts.ts';
@@ -44,6 +44,7 @@
 	import { TaskStore } from '#lib/stores/tasks.svelte.ts';
 	import { theme } from '#lib/stores/theme.svelte.ts';
 	import { toasts } from '#lib/stores/toasts.svelte.ts';
+	import { appWindow } from '#lib/stores/window.svelte.ts';
 	import { fileToBase64, isTorrentFile, linksFromDrop, splitLinks } from '#lib/utils/sources.ts';
 
 	const store = new TaskStore();
@@ -100,6 +101,7 @@
 
 	onMount(() => {
 		const stopTheme = theme.start();
+		void appWindow.init();
 		void store.connect();
 		const unlisteners = [
 			events.externalRequestsEvent.listen(() => void takeExternal()),
@@ -367,8 +369,9 @@
 	}}
 />
 
-<div class="flex h-full gap-3 p-3">
+<div class="flex h-full">
 	<Sidebar
+		tasks={store.tasks}
 		{filter}
 		{counts}
 		{categories}
@@ -381,6 +384,24 @@
 	/>
 
 	<main class="relative flex min-w-0 flex-1 flex-col">
+		<!-- The top strip moves the window; what is in it stays clickable. -->
+		<div class="flex h-16 shrink-0 items-center gap-3" data-tauri-drag-region="deep">
+			{#if !settingsOpen}
+				<div class="relative ml-3 w-full max-w-sm min-w-24">
+					<Search size={15} class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-(--muted)" aria-hidden="true" />
+					<input
+						bind:this={searchInput}
+						class="input py-2 pl-10"
+						type="search"
+						placeholder="Search downloads"
+						title="Search (Ctrl+F)"
+						aria-label="Search downloads"
+						bind:value={search}
+					/>
+				</div>
+			{/if}
+			<div class="ml-auto self-start"><WindowControls /></div>
+		</div>
 		{#if settingsOpen}
 			<SettingsPage
 				onsaved={(s: SettingsView) => (categories = s.categories)}
@@ -388,23 +409,10 @@
 				onshownotes={() => void showWhatsNew(true)}
 			/>
 		{:else}
-			<header class="glass absolute inset-x-0 top-0 z-20 flex items-center gap-2 rounded-full px-2.5 py-2">
-				<button class="btn-primary" onclick={() => openAdd()} title="New download (Ctrl+N)">
-					<Plus size={14} /> Add
-				</button>
-				<div class="relative ml-1 max-w-72 min-w-24 flex-1">
-					<Search size={14} class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-(--muted)" aria-hidden="true" />
-					<input
-						bind:this={searchInput}
-						class="input rounded-full py-1.5 pl-8 text-xs"
-						type="search"
-						placeholder="Search (Ctrl+F)"
-						aria-label="Search downloads"
-						bind:value={search}
-					/>
-				</div>
+			<header class="flex h-12 shrink-0 items-center gap-2 pr-6 pl-3">
+				<h1 class="page-title min-w-0 flex-1 truncate">{filter.type === 'all' ? 'All downloads' : filterLabel}</h1>
 				<select
-					class="input w-36 shrink-0 rounded-full py-1.5 text-xs"
+					class="input input-quiet w-36 shrink-0 py-1.5 text-xs"
 					aria-label="Sort downloads"
 					bind:value={sort}
 					onchange={() => {
@@ -415,7 +423,7 @@
 				>
 					{#each SORTS as s (s.key)}<option value={s.key}>{s.label}</option>{/each}
 				</select>
-				<div class="ml-auto flex items-center gap-1.5">
+				<div class="flex items-center gap-1.5">
 					{#if selectedRows.length > 0}
 						<span class="mr-1 text-xs whitespace-nowrap text-(--muted)" aria-live="polite">{selectedRows.length} selected</span>
 						<button class="btn" aria-label="Pause" title="Pause" disabled={!selectedRows.some(canPause)} onclick={() => selectedRows.filter(canPause).forEach((r) => store.pause(r.id))}>
@@ -435,23 +443,26 @@
 							<Play size={13} /> <span class="hidden lg:inline">Resume all</span>
 						</button>
 					{/if}
+					<button class="btn-primary" onclick={() => openAdd()} title="New download (Ctrl+N)">
+						<Plus size={14} /> Add
+					</button>
 				</div>
 			</header>
 
 			{#if store.unavailable}
-				<div role="alert" class="mt-16 rounded-2xl bg-red-500/15 p-3 text-sm text-red-800 dark:text-red-200">
+				<div role="alert" class="mx-3 my-2 rounded-2xl bg-red-500/15 p-3 text-sm text-red-800 dark:text-red-200">
 					<p class="font-medium">The download engine is not running.</p>
 					<p>{store.unavailable}</p>
 					<p class="mt-1 text-xs">Close any running <code>persivio</code> command-line session, then restart the app.</p>
 				</div>
 			{/if}
 
-			<div class="flex min-h-0 flex-1 gap-3">
-				<div class="relative min-w-0 flex-1">
+			<div class="flex min-h-0 flex-1">
+				<div class="relative min-w-0 flex-1 pr-3">
 					{#if store.loaded && visible.length === 0 && !store.unavailable}
 						<div class="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
 							{#if store.tasks.length === 0}
-								<span class="glass grid size-16 place-items-center rounded-3xl text-teal-700 dark:text-teal-300"><Download size={26} /></span>
+								<img src="/persivio-logo.svg" alt="" class="size-16" width="64" height="64" draggable="false" />
 								<p class="text-sm font-medium">No downloads yet</p>
 								<p class="max-w-sm text-xs text-(--muted)">
 									Paste a link with <span class="kbd">Ctrl+V</span>, drop links or .torrent files here, or click Add.
@@ -470,8 +481,8 @@
 							rows={visible}
 							{selection}
 							label="{filterLabel} downloads"
-							insetTop={60}
-							insetBottom={52}
+							insetTop={8}
+							insetBottom={16}
 							onselect={onSelect}
 							onmenu={onMenu}
 							onopen={(id) => {
@@ -484,16 +495,9 @@
 							onreveal={(id) => store.reveal(id)}
 						/>
 					{/if}
-					{#if store.tasks.length > 0}
-						<div class="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center">
-							<div class="pointer-events-auto"><StatusBar tasks={store.tasks} /></div>
-						</div>
-					{/if}
 				</div>
 				{#if detailsOpen && focusedTask}
-					<div class="flex pt-[3.75rem]">
-						<DetailDrawer task={focusedTask} {store} onclose={() => (detailsOpen = false)} />
-					</div>
+					<DetailDrawer task={focusedTask} {store} onclose={() => (detailsOpen = false)} />
 				{/if}
 			</div>
 		{/if}

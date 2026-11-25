@@ -78,7 +78,7 @@
 
 <div
 	bind:this={scroller}
-	class="h-full overflow-y-auto focus:outline-none"
+	class="scroll-fade h-full overflow-y-auto focus:outline-none"
 	role="listbox"
 	aria-label={label}
 	aria-multiselectable="true"

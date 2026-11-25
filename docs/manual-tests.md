@@ -30,6 +30,8 @@ Record results in the table at the end (date, OS, version, pass/fail, notes).
 | 1.6 | Tray menu → Pause all, then Resume all. | Downloads pause, then resume. |
 | 1.7 | Settings → Desktop → untick "Keep running in the system tray…", save, close the window. | The app quits (gracefully: resumes later where it stopped). |
 | 1.8 | Tray menu → Quit while downloading. | App exits within a few seconds; on restart the download is paused with its progress kept. |
+| 1.9 | Windows: drag the top strip, double-click it, drag an edge; the same with a dialog open. | The window moves, maximizes, resizes. |
+| 1.10 | Windows: update from a version with another icon. | The taskbar shows the new icon. |
 
 ## 2. Single instance and magnet links
 

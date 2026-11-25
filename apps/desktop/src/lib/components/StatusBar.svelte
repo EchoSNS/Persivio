@@ -1,4 +1,4 @@
-<!-- Totals over every download, floating under the list. -->
+<!-- Totals over every download, at the foot of the sidebar. -->
 <script lang="ts">
 	import { ArrowDown, ArrowUp } from '@lucide/svelte';
 	import { isActive, type TaskRow } from '#lib/stores/reducer.ts';
@@ -22,19 +22,19 @@
 </script>
 
 <div
-	class="glass flex items-center gap-4 rounded-full px-4 py-1.5 text-xs tabular-nums"
+	class="mt-3 ml-5 grid gap-1.5 text-xs tabular-nums"
 	role="group"
 	aria-label="Totals"
 >
 	<span class="inline-flex items-center gap-1.5" title="Total download speed">
 		<ArrowDown size={13} class="text-teal-700 dark:text-teal-300" aria-hidden="true" />
 		<span class="sr-only">Download speed</span>
-		<span class="min-w-16 font-medium">{formatSpeed(totals.down)}</span>
+		<span class="font-medium">{formatSpeed(totals.down)}</span>
 	</span>
 	<span class="inline-flex items-center gap-1.5" title="Total upload speed">
 		<ArrowUp size={13} class="text-violet-700 dark:text-violet-300" aria-hidden="true" />
 		<span class="sr-only">Upload speed</span>
-		<span class="min-w-16 font-medium">{formatSpeed(totals.up)}</span>
+		<span class="font-medium">{formatSpeed(totals.up)}</span>
 	</span>
 	<span class="text-(--muted)">
 		{totals.active} active{totals.queued > 0 ? `, ${totals.queued} waiting` : ''}

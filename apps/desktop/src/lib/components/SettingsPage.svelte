@@ -235,13 +235,12 @@
 </Modal>
 
 {#snippet section(title: string)}
-	<h2 class="mb-3 text-sm font-semibold">{title}</h2>
+	<h2 class="mb-4 text-sm font-semibold">{title}</h2>
 {/snippet}
 
-<div class="h-full overflow-y-auto">
-	<form class="mx-auto max-w-2xl space-y-4 px-2 pb-6" onsubmit={save}>
-		<div class="glass sticky top-0 z-10 flex items-center justify-between rounded-full py-2 pr-2.5 pl-5">
-			<h1 class="text-base font-semibold">Settings</h1>
+<form class="flex min-h-0 flex-1 flex-col" onsubmit={save}>
+		<div class="flex h-12 shrink-0 items-center justify-between gap-2 pr-6 pl-3">
+			<h1 class="page-title">Settings</h1>
 			<div class="flex gap-2">
 				<button type="button" class="btn" disabled={!dirty || saving} onclick={() => saved && reset(saved)}>
 					Discard changes
@@ -252,12 +251,14 @@
 			</div>
 		</div>
 
+	<div class="scroll-fade min-h-0 flex-1 overflow-y-auto pr-6 pl-3">
+	<div class="max-w-2xl pb-8">
 		{#if error}
 			<p role="alert" class="rounded-xl bg-red-500/15 p-2.5 text-sm text-red-800 dark:text-red-200">{error}</p>
 		{/if}
 
 		{#if draft}
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('General')}
 				<div class="space-y-3">
 					<div>
@@ -280,7 +281,7 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Connections')}
 				<div class="grid gap-3 sm:grid-cols-2">
 					<div>
@@ -310,14 +311,14 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Speed limit')}
 				<label class="label" for="s-limit">Global download limit (MiB/s)</label>
 				<input id="s-limit" class="input sm:w-48" inputmode="decimal" placeholder="Unlimited" bind:value={limitMiB} />
 				<p class="hint">Shared by all downloads. Changes apply immediately, also to running ones.</p>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('BitTorrent')}
 				<div class="space-y-3">
 					<div class="grid gap-3 sm:grid-cols-2">
@@ -350,7 +351,7 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Desktop')}
 				<div class="space-y-2.5">
 					{#each DESKTOP_TOGGLES as t (t.key)}
@@ -365,7 +366,7 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Categories')}
 				<ul class="mb-3 flex flex-wrap gap-2">
 					{#each draft.categories as c (c)}
@@ -400,7 +401,7 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Browser integration')}
 				<div class="space-y-3">
 					<label class="flex items-start gap-2 text-sm">
@@ -450,7 +451,7 @@
 				</div>
 			</section>
 
-			<section class="panel p-4">
+			<section class="section">
 				{@render section('Updates')}
 				<div class="space-y-3">
 					<p class="text-sm">Persivio {version}</p>
@@ -468,7 +469,7 @@
 			</section>
 		{/if}
 
-		<section class="panel p-4">
+		<section class="section">
 			{@render section('Diagnostics')}
 			<p class="text-sm">
 				A report for reporting a problem: version, system, settings and the log. Links, file names,
@@ -481,7 +482,7 @@
 			</div>
 		</section>
 
-		<section class="panel p-4">
+		<section class="section">
 			{@render section('Appearance')}
 			<div class="inline-flex rounded-full border border-(--line) bg-(--control) p-0.5" role="radiogroup" aria-label="Theme">
 				{#each THEMES as t (t.value)}
@@ -516,7 +517,7 @@
 			<p class="hint">Saved on this computer immediately.</p>
 		</section>
 
-		<section class="panel p-4">
+		<section class="section">
 			{@render section('Keyboard shortcuts')}
 			<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
 				{#each SHORTCUTS as [keys, what] (keys)}
@@ -525,5 +526,6 @@
 				{/each}
 			</dl>
 		</section>
-	</form>
-</div>
+	</div>
+	</div>
+</form>

@@ -4,17 +4,18 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Glass theme (ADR-024). Surfaces are described by a few variables, so light, dark and
- * the solid fallback differ only here. Blur is used on a handful of fixed surfaces and
- * never on list rows.
+ * One continuous surface (ADR-027): space and headings separate things, not panels. Glass
+ * (ADR-024) is left for what floats above it: dialogs, menus, messages. Light, dark and
+ * the solid fallback differ only in these variables.
  */
 :root {
 	color-scheme: light;
 
-	--app-bg: #e9eef4;
-	--glow-1: rgb(45 212 191 / 0.38);
-	--glow-2: rgb(96 165 250 / 0.36);
-	--glow-3: rgb(192 132 252 / 0.24);
+	--app-bg: #eef2f6;
+	--glow-1: rgb(45 212 191 / 0.3);
+	--glow-2: rgb(251 146 60 / 0.24);
+	--glow-3: rgb(96 165 250 / 0.22);
+	--accent: #b93c0a;
 
 	--glass-fill: rgb(255 255 255 / 0.55);
 	--glass-fill-strong: rgb(255 255 255 / 0.82);
@@ -24,7 +25,7 @@
 	--glass-shadow: 0 10px 34px rgb(30 41 59 / 0.13);
 	--glass-filter: blur(22px) saturate(170%);
 
-	--control: rgb(255 255 255 / 0.62);
+	--control: rgb(255 255 255 / 0.7);
 	--control-hover: rgb(255 255 255 / 0.92);
 	--field: rgb(255 255 255 / 0.72);
 	--row-hover: rgb(255 255 255 / 0.5);
@@ -37,10 +38,11 @@
 :root.dark {
 	color-scheme: dark;
 
-	--app-bg: #090d16;
-	--glow-1: rgb(13 148 136 / 0.42);
-	--glow-2: rgb(37 99 235 / 0.36);
-	--glow-3: rgb(126 34 206 / 0.3);
+	--app-bg: #0a1019;
+	--glow-1: rgb(13 148 136 / 0.36);
+	--glow-2: rgb(194 65 12 / 0.36);
+	--glow-3: rgb(37 99 235 / 0.2);
+	--accent: #fb8a3c;
 
 	--glass-fill: rgb(24 31 46 / 0.5);
 	--glass-fill-strong: rgb(21 27 40 / 0.86);
@@ -96,9 +98,9 @@ body {
 body {
 	@apply text-zinc-900 antialiased dark:text-zinc-100;
 	background:
-		radial-gradient(52rem 36rem at 6% -6%, var(--glow-1), transparent 68%),
-		radial-gradient(56rem 42rem at 104% 14%, var(--glow-2), transparent 68%),
-		radial-gradient(48rem 38rem at 44% 114%, var(--glow-3), transparent 68%), var(--app-bg);
+		radial-gradient(60rem 40rem at 0% -10%, var(--glow-1), transparent 70%),
+		radial-gradient(64rem 40rem at 84% -18%, var(--glow-2), transparent 70%),
+		radial-gradient(60rem 36rem at 60% 120%, var(--glow-3), transparent 70%), var(--app-bg);
 	font-family:
 		'Segoe UI Variable Text',
 		system-ui,
@@ -126,22 +128,17 @@ body {
 	}
 
 	.btn {
-		@apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-[background-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
+		@apply inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium whitespace-nowrap transition-[background-color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
 		background: var(--control);
-		border: 1px solid var(--line);
-		box-shadow: inset 0 1px 0 var(--glass-shine);
 	}
 	.btn:hover {
 		background: var(--control-hover);
 	}
 	.btn-primary {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-linear-to-b from-teal-600 to-teal-700 px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition-[filter,transform] duration-150 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
-		box-shadow:
-			inset 0 1px 0 rgb(255 255 255 / 0.4),
-			0 4px 14px rgb(13 148 136 / 0.32);
+		@apply inline-flex items-center gap-1.5 rounded-xl bg-teal-700 px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-white transition-[filter,transform] duration-150 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40;
 	}
 	.btn-danger {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-linear-to-b from-red-600 to-red-700 px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap text-white transition-[filter,transform] duration-150 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none active:scale-[0.97];
+		@apply inline-flex items-center gap-1.5 rounded-xl bg-red-700 px-3.5 py-2 text-xs font-semibold whitespace-nowrap text-white transition-[filter,transform] duration-150 hover:brightness-110 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none active:scale-[0.97];
 	}
 	.icon-btn {
 		@apply inline-flex size-7 shrink-0 items-center justify-center rounded-full text-(--muted) transition-colors duration-150 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none disabled:pointer-events-none disabled:opacity-30 dark:hover:text-white;
@@ -161,6 +158,11 @@ body {
 	select.input {
 		@apply cursor-default;
 	}
+	/* Only a choice: no frame until it is used. */
+	.input-quiet {
+		background: transparent;
+		border-color: transparent;
+	}
 	.label {
 		@apply mb-1 block text-xs font-medium text-(--muted);
 	}
@@ -170,12 +172,19 @@ body {
 	.field-error {
 		@apply mt-1 text-xs text-red-700 dark:text-red-300;
 	}
-	/* A card inside another surface: a fill only, no second layer of blur. */
-	.panel {
-		@apply rounded-2xl;
-		background: var(--glass-fill);
-		border: 1px solid var(--line);
-		box-shadow: inset 0 1px 0 var(--glass-shine);
+	.page-title {
+		@apply text-xl font-semibold tracking-tight;
+	}
+	/* Parts of a page, told apart by space and a hairline. */
+	.section {
+		@apply py-6;
+	}
+	.section + .section {
+		border-top: 1px solid var(--line);
+	}
+	/* Content fades out at the edges it scrolls under. */
+	.scroll-fade {
+		mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 22px), transparent);
 	}
 	.chip {
 		@apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs;
@@ -195,17 +204,33 @@ body {
 		background: var(--control-hover);
 	}
 	.nav-item {
-		@apply flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none;
+		@apply flex w-full items-center gap-2.5 relative rounded-r-xl py-2 pr-3 pl-5 text-left text-sm transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none focus-visible:ring-inset;
 	}
 	.nav-item:hover {
 		background: var(--row-hover);
 	}
 	.nav-item[aria-current] {
-		@apply font-semibold text-teal-800 dark:text-teal-200;
-		background: var(--row-selected);
-		box-shadow:
-			inset 0 1px 0 var(--glass-shine),
-			0 1px 3px var(--glass-edge);
+		@apply font-semibold;
+		color: var(--accent);
+	}
+	.nav-item[aria-current]::before {
+		@apply absolute inset-y-1.5 left-0 w-1 rounded-r-full;
+		content: '';
+		background: var(--accent);
+	}
+
+	.window-controls {
+		@apply flex;
+	}
+	.window-controls button {
+		@apply grid h-9 w-11 place-items-center text-(--muted) transition-colors duration-100;
+	}
+	.window-controls button:hover {
+		@apply text-zinc-900 dark:text-white;
+		background: var(--control-hover);
+	}
+	.window-controls button.close:hover {
+		@apply bg-red-700 text-white;
 	}
 
 	/* Progress bars. Stripes say "working, but this is not download progress". */
@@ -354,12 +379,20 @@ body {
 	}
 }
 
-/* Native <dialog> modals (see Modal.svelte). */
+/* Native <dialog> modals (see Modal.svelte): the dialog fills the window, so the window
+   buttons can be inside it; the panel is what you see. */
 dialog.modal {
-	@apply m-auto max-h-[85vh] w-[min(40rem,calc(100vw-2rem))] overflow-hidden rounded-3xl p-0 text-zinc-900 dark:text-zinc-100;
+	@apply m-0 h-full max-h-none w-full max-w-none place-items-center overflow-hidden bg-transparent p-0 text-zinc-900 dark:text-zinc-100;
 }
 dialog.modal[open] {
+	display: grid;
+}
+.modal-panel {
+	@apply flex max-h-[85vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl outline-none;
 	animation: enter-up 0.18s ease-out;
+}
+.modal-panel.modal-wide {
+	width: min(52rem, calc(100vw - 2rem));
 }
 dialog.modal::backdrop {
 	background: rgb(8 12 20 / 0.38);
@@ -388,7 +421,6 @@ dialog.modal::backdrop {
 /* Windows high contrast: the system chooses the colors; only keep visible borders. */
 @media (forced-colors: active) {
 	.glass,
-	.panel,
 	.btn,
 	.input,
 	select.input::picker(select) {
