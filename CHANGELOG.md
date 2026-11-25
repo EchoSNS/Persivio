@@ -6,6 +6,15 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
+## [0.5.2] - 2026-11-25
+
+### Security
+- A crafted magnet link can no longer use up the memory and close Persivio.
+
+### Fixed
+- A malformed magnet link is refused with a clear message.
+- Magnet links with a lower-case base32 hash, or starting with `MAGNET:`, work.
+
 ## [0.5.1] - 2026-11-25
 
 ### Changed

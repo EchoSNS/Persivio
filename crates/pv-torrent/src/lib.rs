@@ -8,6 +8,7 @@
 
 mod bencode;
 mod have;
+mod magnet;
 mod motw;
 mod paths;
 mod seeding;
@@ -68,7 +69,8 @@ pub struct MagnetInfo {
 /// # Errors
 /// [`ProtocolError::InvalidSource`] if it is not a valid BitTorrent v1 magnet link.
 pub fn parse_magnet(uri: &str) -> Result<MagnetInfo, ProtocolError> {
-    let magnet = Magnet::parse(uri).map_err(|e| ProtocolError::InvalidSource(format!("{e:#}")))?;
+    let magnet = Magnet::parse(&magnet::clean(uri)?)
+        .map_err(|e| ProtocolError::InvalidSource(format!("{e:#}")))?;
     let id = magnet
         .as_id20()
         .ok_or_else(|| ProtocolError::InvalidSource("magnet has no v1 info hash".to_owned()))?;
@@ -310,7 +312,7 @@ impl TorrentProtocol {
             (Some(saved), _) => AddTorrent::from_bytes(saved.torrent_bytes.clone()),
             (None, Source::Magnet { uri }) => {
                 ctx.events.phase(RunPhase::FetchingMetadata);
-                AddTorrent::from_url(uri.clone())
+                AddTorrent::from_url(magnet::clean(uri)?)
             }
             (None, Source::TorrentFile { bytes }) => {
                 bencode::check(bytes).map_err(|e| {

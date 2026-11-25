@@ -34,6 +34,10 @@
     and wraps in release builds, and a piece length of zero, which it divides by (a panic in
     every build). Runs also get their own task, so a panic in a library fails that download
     instead of leaving it running forever.
+11. **Magnet links are rebuilt before librqbit parses them** (`magnet::clean`): only the v1
+    hash, name and trackers are passed on. Found by fuzzing (a padded base32 hash panics)
+    and by reading the parser (a huge `so=` range uses up the memory, which ends the whole
+    process, so the task isolation in 10 does not help).
 
 ## Consequences
 - Until a release key exists, releases contain installers but no updates.
