@@ -12,7 +12,7 @@ use tauri_specta::Event as _;
 use tokio::sync::watch;
 
 use crate::AppState;
-use crate::dto::{ClipboardLinksEvent, ExternalRequestsEvent};
+use crate::dto::{BrowserOffersEvent, ClipboardLinksEvent, ExternalRequestsEvent};
 use crate::external::ExternalAddView;
 use crate::integration::Sink;
 use crate::sleep::SleepInhibitor;
@@ -31,6 +31,15 @@ pub struct Desktop {
     /// Browser bridge state, written by its supervisor.
     pub bridge: std::sync::Arc<Mutex<crate::bridge::BridgeStatus>>,
     pending: Mutex<Vec<ExternalAddView>>,
+    /// How the window was before a question brought it up.
+    before_question: Mutex<Option<Away>>,
+}
+
+/// A window that is not on the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Away {
+    Hidden,
+    Minimized,
 }
 
 impl Desktop {
@@ -41,6 +50,7 @@ impl Desktop {
             settings: watch::Sender::new(settings),
             bridge: std::sync::Arc::default(),
             pending: Mutex::new(Vec::new()),
+            before_question: Mutex::new(None),
         }
     }
 
@@ -86,6 +96,52 @@ pub fn handle_external<R: Runtime>(app: &AppHandle<R>, view: ExternalAddView) {
     if let Err(e) = ExternalRequestsEvent.emit(app) {
         tracing::warn!("cannot signal external request: {e}");
     }
+}
+
+/// Brings the window up to ask about a download from the browser.
+pub fn ask_about_offers<R: Runtime>(app: &AppHandle<R>) {
+    if let (Some(window), Some(desktop)) =
+        (app.get_webview_window("main"), app.try_state::<Desktop>())
+    {
+        let away = if !window.is_visible().unwrap_or(true) {
+            Some(Away::Hidden)
+        } else if window.is_minimized().unwrap_or(false) {
+            Some(Away::Minimized)
+        } else {
+            None
+        };
+        let mut before = desktop
+            .before_question
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if away.is_some() {
+            *before = away;
+        }
+    }
+    show_main_window(app);
+    if let Err(e) = BrowserOffersEvent.emit(app) {
+        tracing::warn!("cannot signal a browser download: {e}");
+    }
+}
+
+/// After the last answer: the window goes back to where it was, so the user is back in
+/// the browser.
+pub fn offers_answered<R: Runtime>(app: &AppHandle<R>) {
+    let (Some(window), Some(desktop)) =
+        (app.get_webview_window("main"), app.try_state::<Desktop>())
+    else {
+        return;
+    };
+    let before = desktop
+        .before_question
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
+    let _ = match before {
+        Some(Away::Hidden) => window.hide(),
+        Some(Away::Minimized) => window.minimize(),
+        None => Ok(()),
+    };
 }
 
 /// Offers clipboard links to the UI.

@@ -84,8 +84,8 @@ export function baseName(path) {
 	return String(path ?? '').split(/[\\/]/).pop() ?? '';
 }
 
-/** Body for `POST /v1/downloads`. */
-export function downloadPayload({ url, referrer, filename }, cookies, userAgent) {
+/** Body for `POST /v1/offers`; `size` and `mime` are shown in Persivio's question. */
+export function downloadPayload({ url, referrer, filename, size, mime }, cookies, userAgent) {
 	const body = { url };
 	if (referrer && isHttpUrl(referrer)) body.referrer = referrer;
 	if (userAgent) body.userAgent = userAgent;
@@ -93,6 +93,13 @@ export function downloadPayload({ url, referrer, filename }, cookies, userAgent)
 	if (cookie) body.cookies = cookie;
 	const name = baseName(filename);
 	if (name) body.filename = name;
+	if (Number.isSafeInteger(size) && size > 0) body.size = size;
+	if (mime) body.mime = String(mime);
+	return body;
+}
+
+/** The same body for Persivio before 0.7, which knows neither `/v1/offers` nor the details. */
+export function legacyPayload({ size: _size, mime: _mime, ...body }) {
 	return body;
 }
 
@@ -119,6 +126,7 @@ export function describeStatus(status) {
 	switch (status) {
 		case 201:
 		case 200:
+		case 202:
 			return 'ok';
 		case 401:
 			return 'Wrong pairing token: copy it again from Persivio → Settings → Browser integration.';
@@ -126,6 +134,8 @@ export function describeStatus(status) {
 			return 'Persivio refused the request (not from this extension).';
 		case 413:
 			return 'Request too large.';
+		case 429:
+			return 'Too many downloads are waiting for your answer in Persivio.';
 		case 422:
 			return 'Persivio could not use this link.';
 		default:
@@ -134,6 +144,26 @@ export function describeStatus(status) {
 }
 
 /**
+ * Offers a download to Persivio while the browser waits for its file name, so before the
+ * browser asks where to save it (Chromium). Once Persivio has it, the browser's copy is
+ * cancelled and its question never appears. Otherwise the browser goes on as if nothing
+ * had happened: 'kept'. Or, without `keepInBrowser`, it is cancelled too: 'dropped'.
+ */
+export async function takeOver(id, api, send, keepInBrowser) {
+	let error;
+	try {
+		error = await send();
+	} catch (e) {
+		error = String(e);
+	}
+	if (error !== null && keepInBrowser) return { result: 'kept', error };
+	await api.cancel(id).catch(() => {});
+	await api.erase(id).catch(() => {});
+	return { result: error === null ? 'sent' : 'dropped', error };
+}
+
+/**
+ * For browsers without that event (Firefox).
  * Moves a running browser download to Persivio without losing it: pause, send, and only
  * after Persivio accepted it cancel the browser's copy. On failure the same download
  * resumes (requesting it again would break one-time links).

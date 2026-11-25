@@ -20,6 +20,7 @@
 		errorMessage,
 		events,
 		type ExternalAddView,
+		type OfferView,
 		type ReleaseNotesView,
 		type SettingsView,
 		type UpdateView
@@ -28,6 +29,7 @@
 	import UpdateDialog from '#lib/components/UpdateDialog.svelte';
 	import { loadLastSeen, notesToShow, saveLastSeen } from '#lib/utils/versions.ts';
 	import AddDialog, { type TorrentDraft } from '#lib/components/AddDialog.svelte';
+	import OfferDialog from '#lib/components/OfferDialog.svelte';
 	import ContextMenu, { type MenuItem } from '#lib/components/ContextMenu.svelte';
 	import DetailDrawer from '#lib/components/DetailDrawer.svelte';
 	import Modal from '#lib/components/Modal.svelte';
@@ -65,6 +67,16 @@
 	let removing = $state<{ ids: string[]; deleteFiles: boolean } | null>(null);
 	let whatsNew = $state<{ releases: ReleaseNotesView[]; version: string } | null>(null);
 	let update = $state<UpdateView | null>(null);
+	/** Downloads from the browser that wait for an answer, one question at a time. */
+	let offers = $state<OfferView[]>([]);
+
+	async function loadOffers() {
+		try {
+			offers = await commands.listOffers();
+		} catch (e) {
+			toasts.error(errorMessage(e));
+		}
+	}
 
 	/** After an update (or on first start): the notes not seen yet. `all`: every release. */
 	async function showWhatsNew(all: boolean) {
@@ -105,6 +117,7 @@
 		void store.connect();
 		const unlisteners = [
 			events.externalRequestsEvent.listen(() => void takeExternal()),
+			events.browserOffersEvent.listen(() => void loadOffers()),
 			events.updateAvailableEvent.listen((e) => {
 				const found = e.payload;
 				toasts.offer(`Persivio ${found.version} is available`, {
@@ -121,6 +134,7 @@
 		void showWhatsNew(false);
 		// Requests that started the app (a magnet click, an opened .torrent).
 		void takeExternal();
+		void loadOffers();
 		commands.getSettings().then(
 			(s) => (categories = s.categories),
 			() => {}
@@ -255,7 +269,7 @@
 		// An open dropdown handles its own keys (Escape closes it).
 		if (e.target instanceof HTMLOptionElement) return;
 		const modalOpen =
-			add.open || removing !== null || whatsNew !== null || update !== null || menu !== null;
+			add.open || offers.length > 0 || removing !== null || whatsNew !== null || update !== null || menu !== null;
 		if (modalOpen) return; // the <dialog> handles its own keys (Escape closes it)
 		const action = actionFor(e, isTextField(e.target));
 		if (action === null) return;
@@ -567,6 +581,13 @@
 >
 	{#if whatsNew}<ReleaseNotes releases={whatsNew.releases} />{/if}
 </Modal>
+
+<OfferDialog
+	offer={offers[0] ?? null}
+	waiting={Math.max(0, offers.length - 1)}
+	{categories}
+	onanswered={(id) => (offers = offers.filter((o) => o.id !== id))}
+/>
 
 <UpdateDialog {update} onclose={() => (update = null)} />
 

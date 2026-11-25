@@ -30,6 +30,7 @@ use crate::dto::{
 use crate::error::CommandError;
 use crate::external::ExternalAddView;
 use crate::forward::{PROGRESS_INTERVAL, forward_progress};
+use crate::offers::{AcceptOffer, OfferView, Offers};
 use crate::ops;
 use crate::updates::{UpdateProgress, UpdateView, Updates};
 
@@ -203,6 +204,43 @@ pub async fn set_settings(
 #[must_use]
 pub fn take_external_requests(desktop: State<'_, Desktop>) -> Vec<ExternalAddView> {
     desktop.take_pending()
+}
+
+/// Downloads from the browser that wait for an answer, oldest first.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+pub fn list_offers(offers: State<'_, Arc<Offers>>) -> Vec<OfferView> {
+    offers.list()
+}
+
+/// Adds an offered download and returns its task id.
+#[tauri::command]
+#[specta::specta]
+pub async fn accept_offer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    offers: State<'_, Arc<Offers>>,
+    id: String,
+    answer: AcceptOffer,
+) -> Result<String, CommandError> {
+    let task = offers.accept(state.engine()?, &id, answer).await?;
+    answered(&app, &offers);
+    Ok(task)
+}
+
+/// Drops an offered download.
+#[tauri::command]
+#[specta::specta]
+pub fn decline_offer(app: AppHandle, offers: State<'_, Arc<Offers>>, id: String) {
+    offers.remove(&id);
+    answered(&app, &offers);
+}
+
+fn answered(app: &AppHandle, offers: &Offers) {
+    if offers.list().is_empty() {
+        crate::desktop::offers_answered(app);
+    }
 }
 
 /// The folder new downloads go to.

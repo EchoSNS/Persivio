@@ -14,6 +14,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use persivio_desktop::bridge::{self, BridgeState, DownloadRequest};
+use persivio_desktop::offers::{AcceptOffer, MAX_PENDING, Offers};
 use pv_core::TaskStateKind;
 use pv_engine::{Engine, EngineConfig, EngineHandle};
 use pv_testkit::{AUTH_COOKIE, Fixture, TestServer, sha256_file};
@@ -43,13 +44,26 @@ async fn env() -> Env {
 }
 
 impl Env {
+    /// Without the question, as with the setting off.
     fn router(&self) -> Router {
-        bridge::router(BridgeState {
+        self.asking(false).0
+    }
+
+    fn asking(&self, ask: bool) -> (Router, Arc<Offers>) {
+        let offers = Arc::new(Offers::new(|| {}));
+        let (_, settings) = tokio::sync::watch::channel(pv_core::DesktopSettings {
+            confirm_browser_downloads: ask,
+            ..pv_core::DesktopSettings::default()
+        });
+        let router = bridge::router(BridgeState {
             token: self.token.clone().into(),
             port: PORT,
             engine: Arc::new(self.engine.clone()),
             os_dir: Some(self.downloads.clone()),
-        })
+            offers: Arc::clone(&offers),
+            settings,
+        });
+        (router, offers)
     }
 }
 
@@ -269,6 +283,8 @@ async fn a_download_behind_a_login_succeeds_with_forwarded_cookies() {
             user_agent: Some("Mozilla/5.0 (Brave test)".into()),
             cookies: cookies.map(str::to_owned),
             filename: Some("private.bin".into()),
+            size: None,
+            mime: None,
         };
         request(
             "POST",
@@ -324,6 +340,84 @@ async fn a_download_behind_a_login_succeeds_with_forwarded_cookies() {
         wait_for(&env.engine, id).await.state.kind(),
         TaskStateKind::Failed
     );
+    env.engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_download_waits_for_the_user_and_keeps_its_cookies() {
+    let f = Fixture::random("private.bin", 200_000, 11);
+    let server = TestServer::start([f.clone()]).await.unwrap();
+    let env = env().await;
+    let (r, offers) = env.asking(true);
+    let send = |path: &str, file: &str| {
+        let body = DownloadRequest {
+            url: server.url(file),
+            referrer: None,
+            user_agent: None,
+            cookies: Some(AUTH_COOKIE.to_owned()),
+            filename: Some("private.bin".into()),
+            size: Some(200_000),
+            mime: Some("application/zip".into()),
+        };
+        request(
+            "POST",
+            path,
+            &host(),
+            Some(ORIGIN),
+            Some(&env.token),
+            Some(serde_json::to_string(&body).unwrap()),
+        )
+    };
+    // Nothing is added or requested from the site before the answer.
+    let req = send("/v1/offers", "/auth/private.bin");
+    assert_eq!(status(&r, req).await, StatusCode::ACCEPTED);
+    // An older extension takes only 201 for "Persivio has it".
+    let req = send("/v1/downloads", "/auth/private.bin");
+    assert_eq!(status(&r, req).await, StatusCode::CREATED);
+    assert_eq!(env.engine.list().await.unwrap(), []);
+    assert_eq!(server.requests().len(), 0);
+    let offer = offers.list().remove(0);
+    assert_eq!(offers.list().len(), 1, "the same link once");
+    assert_eq!(
+        (offer.file_name.as_str(), offer.size),
+        ("private.bin", Some(200_000))
+    );
+
+    // A folder that cannot be used: the question stays.
+    let bad = AcceptOffer {
+        dest_dir: Some("relative".into()),
+        ..AcceptOffer::default()
+    };
+    assert!(offers.accept(&env.engine, &offer.id, bad).await.is_err());
+    assert_eq!(offers.list().len(), 1);
+
+    let answer = AcceptOffer {
+        file_name: Some("../renamed.bin".into()),
+        ..AcceptOffer::default()
+    };
+    let id = offers.accept(&env.engine, &offer.id, answer).await.unwrap();
+    let done = wait_for(&env.engine, id.parse().unwrap()).await;
+    assert_eq!(
+        done.state.kind(),
+        TaskStateKind::Completed,
+        "{:?}",
+        done.state
+    );
+    let saved = sha256_file(env.downloads.join("renamed.bin"))
+        .await
+        .unwrap();
+    assert_eq!(saved, f.sha256);
+    assert_eq!(offers.list(), []);
+    let again = offers.accept(&env.engine, &offer.id, AcceptOffer::default());
+    assert!(again.await.is_err(), "answered once");
+
+    // A page that starts downloads by itself cannot fill the queue.
+    for i in 0..MAX_PENDING {
+        let req = send("/v1/offers", &format!("/auth/{i}"));
+        assert_eq!(status(&r, req).await, StatusCode::ACCEPTED);
+    }
+    let req = send("/v1/offers", "/auth/one-more");
+    assert_eq!(status(&r, req).await, StatusCode::TOO_MANY_REQUESTS);
     env.engine.shutdown().await;
 }
 
@@ -393,6 +487,7 @@ async fn the_supervisor_follows_the_settings_and_reports_busy_ports() {
         rx,
         Arc::new(env.engine.clone()),
         Some(env.downloads.clone()),
+        Arc::new(Offers::new(|| {})),
         Arc::clone(&status),
     ));
     let settle = || tokio::time::sleep(Duration::from_millis(200));
@@ -447,16 +542,27 @@ async fn serve_for_a_real_browser() {
     let server = TestServer::start([f.clone()]).await.unwrap();
     let env = env().await;
     let port = free_port();
+    // PERSIVIO_TEST_ASK: wait for the user, and print what would be asked.
+    let ask = std::env::var_os("PERSIVIO_TEST_ASK").is_some();
     let (_tx, rx) = tokio::sync::watch::channel(pv_core::DesktopSettings {
         browser_bridge: true,
         bridge_port: port,
         bridge_token: env.token.clone(),
+        confirm_browser_downloads: ask,
         ..pv_core::DesktopSettings::default()
+    });
+    let offers = Arc::new_cyclic(|me: &std::sync::Weak<Offers>| {
+        let me = me.clone();
+        Offers::new(move || {
+            let list = me.upgrade().map_or_else(Vec::new, |o| o.list());
+            println!("OFFER {}", serde_json::to_string(&list).unwrap());
+        })
     });
     tokio::spawn(bridge::supervise(
         rx,
         Arc::new(env.engine.clone()),
         Some(env.downloads.clone()),
+        offers,
         Arc::default(),
     ));
     println!(

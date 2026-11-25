@@ -413,6 +413,17 @@
 							</span>
 						</span>
 					</label>
+					<label class="flex items-start gap-2 text-sm">
+						<input
+							type="checkbox"
+							class="mt-0.5 accent-teal-600"
+							bind:checked={draft.desktop.confirmBrowserDownloads}
+						/>
+						<span>
+							Ask before a download from the browser starts
+							<span class="hint block">Shows the file, its size and where it comes from. Off: it is added at once.</span>
+						</span>
+					</label>
 					<div class="grid gap-3 sm:grid-cols-[8rem_1fr]">
 						<div>
 							<label class="label" for="s-bport">Port</label>

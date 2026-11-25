@@ -13,17 +13,18 @@ and other Chromium browsers; Firefox 128+ is supported by the same files.
 4. Click **Load unpacked** and choose this `extension` folder.
 5. Click **Details → Extension options** (or right-click the Persivio icon → Options).
 6. Paste the token, click **Save**, then **Test connection**. It should say
-   "Connected to Persivio 0.6.0."
+   "Connected to Persivio 0.7.0."
 
-Brave keeps an unpacked extension until you remove it. After pulling new code, click
-the reload icon on the extension's card.
+Brave keeps an unpacked extension until you remove it. After an update of these
+files, click the reload icon on the extension's card.
 
 ## What it does
 
 - **Downloads you start in the browser**: files of the listed types (zip, iso, exe, mp4,
-  …) or at least the chosen size (1 MB by default) move to Persivio. The
-  browser's copy is paused, and cancelled only once Persivio accepted it.
-- **Right-click a link → Download with Persivio**: always sends that link.
+  …) or at least the chosen size (1 MB by default) move to
+  Persivio, which shows the file and asks first. The browser's own download and its "save as"
+  window never start; if you cancel in Persivio, nothing is downloaded.
+- **Right-click a link → Download with Persivio**: always offers that link.
 - **If Persivio is not running** (or the token is wrong), the browser simply
   continues its download and a notification explains why. You can turn this fallback off.
 

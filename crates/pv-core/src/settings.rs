@@ -100,6 +100,8 @@ pub struct DesktopSettings {
     pub bridge_port: u16,
     /// Pairing token the extension must send (hex). Generated when the bridge is enabled.
     pub bridge_token: String,
+    /// Ask before a download from the browser is added (ADR-028).
+    pub confirm_browser_downloads: bool,
     /// Check for app updates at startup.
     pub check_for_updates: bool,
 }
@@ -118,6 +120,7 @@ impl Default for DesktopSettings {
             browser_bridge: false,
             bridge_port: DEFAULT_BRIDGE_PORT,
             bridge_token: String::new(),
+            confirm_browser_downloads: true,
             check_for_updates: true,
         }
     }

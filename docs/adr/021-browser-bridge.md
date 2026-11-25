@@ -1,6 +1,6 @@
 # ADR-021: Browser extension talks to a localhost bridge
 
-- **Status:** Accepted
+- **Status:** Accepted (point 6 changed by ADR-028)
 - **Date:** 2026-11-23
 
 ## Context
@@ -44,7 +44,7 @@ Use the **localhost bridge**, opt-in (off by default), hardened as follows:
 5. **Limits**: 64 KiB bodies (413), unknown JSON fields rejected (422), `http(s)` URLs
    only, cookies at most 16 KiB with CR/LF rejected (no header injection), file names
    sanitized.
-6. Browser downloads are **added directly**, not confirmed in a dialog: the user just
+6. *(Changed by ADR-028: Persivio asks first.)* Browser downloads are **added directly**, not confirmed in a dialog: the user just
    clicked "download". The cookies stay in Rust, and the redirect rules of ADR-017
    keep them on the download's own site.
 

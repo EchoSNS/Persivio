@@ -10,7 +10,7 @@
 //! 4. **Size and content limits**: bodies up to 64 KiB, validated fields.
 //!
 //! CORS preflights are answered only for extension origins. A download from the browser
-//! is added directly: the user already clicked "download" there.
+//! waits for the user's answer ([`crate::offers`]), unless that is turned off.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -31,6 +31,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::api::EngineApi;
+use crate::offers::Offers;
 
 /// Largest request body.
 pub const MAX_BODY: usize = 64 * 1024;
@@ -55,12 +56,18 @@ pub struct DownloadRequest {
     /// File name the browser suggested.
     #[serde(default)]
     pub filename: Option<String>,
+    /// Bytes, if the browser knows (shown in the question, never trusted).
+    #[serde(default)]
+    pub size: Option<u64>,
+    /// Media type, if the browser knows (shown in the question).
+    #[serde(default)]
+    pub mime: Option<String>,
 }
 
 /// Reply to a successful add.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Added {
-    /// New task id.
+    /// Id of the new task, or of the offer that waits for the user.
     pub id: String,
 }
 
@@ -75,12 +82,18 @@ pub struct BridgeState {
     pub engine: Arc<dyn EngineApi>,
     /// Fallback download folder (the OS Downloads folder).
     pub os_dir: Option<PathBuf>,
+    /// Where downloads wait for the user's answer.
+    pub offers: Arc<Offers>,
+    /// Current settings: whether to ask.
+    pub settings: watch::Receiver<DesktopSettings>,
 }
 
 /// The bridge's routes with all checks applied.
 pub fn router(state: BridgeState) -> Router {
     Router::new()
         .route("/v1/ping", get(ping))
+        .route("/v1/offers", post(add_offer))
+        // Extensions before 0.7.
         .route("/v1/downloads", post(add_download))
         .layer(middleware::from_fn_with_state(state.clone(), guard))
         .layer(DefaultBodyLimit::max(MAX_BODY))
@@ -219,10 +232,19 @@ pub fn spec_for(req: &DownloadRequest, dest_dir: PathBuf) -> Result<TaskSpec, St
     Ok(spec)
 }
 
-async fn add_download(
-    State(state): State<BridgeState>,
-    body: Result<Json<DownloadRequest>, axum::extract::rejection::JsonRejection>,
-) -> Response {
+type Body = Result<Json<DownloadRequest>, axum::extract::rejection::JsonRejection>;
+
+async fn add_offer(State(state): State<BridgeState>, body: Body) -> Response {
+    receive(&state, body, StatusCode::ACCEPTED).await
+}
+
+async fn add_download(State(state): State<BridgeState>, body: Body) -> Response {
+    // What old extensions take for "Persivio has it".
+    receive(&state, body, StatusCode::CREATED).await
+}
+
+/// Queues the download for the user's answer (`waiting`), or adds it at once.
+async fn receive(state: &BridgeState, body: Body, waiting: StatusCode) -> Response {
     let req = match body {
         Ok(Json(req)) => req,
         // Too large stays 413; malformed or unknown fields become 422.
@@ -239,6 +261,15 @@ async fn add_download(
         Ok(spec) => spec,
         Err(message) => return (StatusCode::UNPROCESSABLE_ENTITY, message).into_response(),
     };
+    if state.settings.borrow().confirm_browser_downloads {
+        return match state.offers.push(spec, req.size, req.mime.as_deref()) {
+            Some(id) => (waiting, Json(Added { id })).into_response(),
+            None => reject(
+                StatusCode::TOO_MANY_REQUESTS,
+                "too many downloads wait for an answer",
+            ),
+        };
+    }
     match state.engine.add(spec).await {
         Ok(id) => (StatusCode::CREATED, Json(Added { id: id.to_string() })).into_response(),
         Err(e) => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()).into_response(),
@@ -279,8 +310,10 @@ pub async fn supervise(
     mut settings: watch::Receiver<DesktopSettings>,
     engine: Arc<dyn EngineApi>,
     os_dir: Option<PathBuf>,
+    offers: Arc<Offers>,
     status: Arc<Mutex<BridgeStatus>>,
 ) {
+    let live = settings.clone();
     let set_status = |s: BridgeStatus| {
         *status.lock().unwrap_or_else(PoisonError::into_inner) = s;
     };
@@ -305,6 +338,8 @@ pub async fn supervise(
                             port,
                             engine: Arc::clone(&engine),
                             os_dir: os_dir.clone(),
+                            offers: Arc::clone(&offers),
+                            settings: live.clone(),
                         });
                         let until = stop.clone();
                         tokio::spawn(async move {
@@ -351,6 +386,8 @@ mod tests {
             user_agent: None,
             cookies: None,
             filename: None,
+            size: None,
+            mime: None,
         }
     }
 

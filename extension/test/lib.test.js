@@ -10,6 +10,8 @@ import {
 	downloadPayload,
 	extensionOf,
 	handOff,
+	legacyPayload,
+	takeOver,
 	normalizeOptions,
 	shouldIntercept
 } from '../src/lib.js';
@@ -141,5 +143,51 @@ describe('handOff', () => {
 		});
 		assert.equal((await handOff(1, done, async () => null, true)).result, 'skipped');
 		assert.deepEqual(done.calls, []);
+	});
+});
+
+describe('takeOver', () => {
+	const api = () => {
+		const calls = [];
+		const f = (name) => async (id) => void calls.push(`${name} ${id}`);
+		return { calls, pause: f('pause'), resume: f('resume'), cancel: f('cancel'), erase: f('erase') };
+	};
+
+	it('cancels the browser download only once Persivio has it', async () => {
+		const a = api();
+		const send = async () => {
+			assert.deepEqual(a.calls, [], 'untouched until Persivio answers');
+			return null;
+		};
+		assert.deepEqual(await takeOver(7, a, send, true), { result: 'sent', error: null });
+		assert.deepEqual(a.calls, ['cancel 7', 'erase 7']);
+	});
+
+	it('leaves the download alone when Persivio cannot take it', async () => {
+		for (const send of [async () => 'not running', async () => Promise.reject(new Error('boom'))]) {
+			const a = api();
+			const r = await takeOver(7, a, send, true);
+			assert.equal(r.result, 'kept');
+			assert.ok(r.error);
+			assert.deepEqual(a.calls, []);
+		}
+	});
+
+	it('without the fallback nothing is downloaded, and it says so', async () => {
+		const a = api();
+		assert.deepEqual(await takeOver(7, a, async () => 'not running', false), { result: 'dropped', error: 'not running' });
+		assert.deepEqual(a.calls, ['cancel 7', 'erase 7']);
+	});
+});
+
+describe('details for the question', () => {
+	it('sends size and type when the browser knows them', () => {
+		const item = { url: 'https://a.example/f', filename: 'f.zip', size: 5, mime: 'application/zip' };
+		const body = downloadPayload(item, [], '');
+		assert.deepEqual(body, { url: 'https://a.example/f', filename: 'f.zip', size: 5, mime: 'application/zip' });
+		assert.deepEqual(legacyPayload(body), { url: 'https://a.example/f', filename: 'f.zip' });
+		for (const size of [-1, 0, 1.5, undefined, NaN]) {
+			assert.ok(!('size' in downloadPayload({ url: 'https://a.example/f', size }, [], '')), String(size));
+		}
 	});
 });

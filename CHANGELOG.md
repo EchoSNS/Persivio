@@ -6,6 +6,14 @@ update (Settings → Updates → What's new shows them all).
 Format: one `## [version] - date` heading per release, then `### Added`, `### Changed`,
 `### Fixed` or `### Security` sections with one line per change, written for users.
 
+## [0.7.0] - 2026-11-25
+
+### Added
+- A question before a download from the browser starts: the file, its size, type, site and folder. Settings → Browser integration turns it off.
+
+### Fixed
+- The browser no longer opens its own "save as" window next to Persivio. Reload the extension after updating.
+
 ## [0.6.0] - 2026-11-25
 
 ### Security

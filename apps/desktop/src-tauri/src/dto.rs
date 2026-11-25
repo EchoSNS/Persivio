@@ -161,7 +161,7 @@ pub fn display_source(source: &Source) -> String {
 }
 
 /// A name to show before the real one is known.
-fn guess_name(source: &Source) -> String {
+pub(crate) fn guess_name(source: &Source) -> String {
     match source {
         Source::Http { url, .. } => url
             .path_segments()
@@ -601,6 +601,8 @@ pub struct DesktopSettingsView {
     pub bridge_port: u16,
     /// Pairing token to paste into the extension (empty until the bridge is enabled).
     pub bridge_token: String,
+    /// Ask before a download from the browser is added.
+    pub confirm_browser_downloads: bool,
     /// Check for updates at startup.
     pub check_for_updates: bool,
 }
@@ -618,6 +620,7 @@ impl From<&pv_core::DesktopSettings> for DesktopSettingsView {
             browser_bridge: d.browser_bridge,
             bridge_port: d.bridge_port,
             bridge_token: d.bridge_token.clone(),
+            confirm_browser_downloads: d.confirm_browser_downloads,
             check_for_updates: d.check_for_updates,
         }
     }
@@ -636,6 +639,7 @@ impl From<DesktopSettingsView> for pv_core::DesktopSettings {
             browser_bridge: d.browser_bridge,
             bridge_port: d.bridge_port,
             bridge_token: d.bridge_token,
+            confirm_browser_downloads: d.confirm_browser_downloads,
             check_for_updates: d.check_for_updates,
         }
     }
@@ -644,6 +648,10 @@ impl From<DesktopSettingsView> for pv_core::DesktopSettings {
 /// Signal: external add requests are waiting (`take_external_requests`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
 pub struct ExternalRequestsEvent;
+
+/// Signal: a download from the browser waits for an answer (`list_offers`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct BrowserOffersEvent;
 
 /// Links found on the clipboard, offered to the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type, tauri_specta::Event)]

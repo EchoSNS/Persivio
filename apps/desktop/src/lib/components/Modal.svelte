@@ -14,8 +14,10 @@
 		children: Snippet;
 		footer?: Snippet;
 		wide?: boolean;
+		/** A click next to it does not close it. */
+		sticky?: boolean;
 	};
-	let { open, title, onclose, children, footer, wide = false }: Props = $props();
+	let { open, title, onclose, children, footer, wide = false, sticky = false }: Props = $props();
 
 	let dialog: HTMLDialogElement | undefined = $state();
 	const titleId = `modal-${Math.random().toString(36).slice(2)}`;
@@ -39,7 +41,7 @@
 	onclose={onclose}
 	onclick={(e) => {
 		// A click on the backdrop lands on the <dialog> itself.
-		if (e.target === dialog) onclose();
+		if (e.target === dialog && !sticky) onclose();
 	}}
 >
 	{#if open}

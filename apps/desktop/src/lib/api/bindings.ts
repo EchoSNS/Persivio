@@ -47,6 +47,12 @@ export const commands = {
 	inspectTorrent: (data: string, options?: InvokeOptions) => __TAURI_INVOKE<TorrentInfoView>("inspect_torrent", { data }, options),
 	/**  External add requests (magnet clicks, opened .torrent files) waiting for the UI. */
 	takeExternalRequests: (options?: InvokeOptions) => __TAURI_INVOKE<ExternalAddView[]>("take_external_requests", undefined, options),
+	/**  Downloads from the browser that wait for an answer, oldest first. */
+	listOffers: (options?: InvokeOptions) => __TAURI_INVOKE<OfferView[]>("list_offers", undefined, options),
+	/**  Adds an offered download and returns its task id. */
+	acceptOffer: (id: string, answer: AcceptOffer, options?: InvokeOptions) => __TAURI_INVOKE<string>("accept_offer", { id, answer }, options),
+	/**  Drops an offered download. */
+	declineOffer: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<void>("decline_offer", { id }, options),
 	/**  Whether the browser bridge listens (and why not). */
 	bridgeStatus: (options?: InvokeOptions) => __TAURI_INVOKE<BridgeStatus>("bridge_status", undefined, options),
 	/**  A fresh pairing token for the browser extension (saved with the settings). */
@@ -75,6 +81,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	browserOffersEvent: makeEvent<BrowserOffersEvent, BrowserOffersEvent>("browser-offers-event"),
 	clipboardLinksEvent: makeEvent<ClipboardLinksEvent, ClipboardLinksEvent>("clipboard-links-event"),
 	engineUiEvent: makeEvent<EngineUiEvent, EngineUiEvent>("engine-ui-event"),
 	externalRequestsEvent: makeEvent<ExternalRequestsEvent, ExternalRequestsEvent>("external-requests-event"),
@@ -82,6 +89,16 @@ export const events = {
 };
 
 /* Types */
+/**  The user's answer "download it". */
+export type AcceptOffer = {
+	/**  Another folder. */
+	destDir: string | null,
+	/**  Another file name. */
+	fileName: string | null,
+	/**  Category label. */
+	category: string | null,
+};
+
 /**  What the user asked to download. */
 export type AddRequest = {
 	/**  Link or `.torrent` file. */
@@ -126,6 +143,9 @@ export type BridgeStatus = {
 	/**  Why it could not start (e.g. the port is in use). */
 	error: string | null,
 };
+
+/**  Signal: a download from the browser waits for an answer (`list_offers`). */
+export type BrowserOffersEvent = null;
 
 /**  Checksum algorithm. */
 export type ChecksumAlgorithmView = 
@@ -178,6 +198,8 @@ export type DesktopSettingsView = {
 	bridgePort: number,
 	/**  Pairing token to paste into the extension (empty until the bridge is enabled). */
 	bridgeToken: string,
+	/**  Ask before a download from the browser is added. */
+	confirmBrowserDownloads: boolean,
 	/**  Check for updates at startup. */
 	checkForUpdates: boolean,
 };
@@ -283,6 +305,28 @@ export type NotesSection = {
 	title: string,
 	/**  One entry per change (plain text; markdown markers removed). */
 	items: string[],
+};
+
+/**  What the confirmation shows. */
+export type OfferView = {
+	/**  Answered with this. */
+	id: string,
+	/**  The file's name, safe to show and to save as. */
+	fileName: string,
+	/**  The link, without a user name or password in it. */
+	url: string,
+	/**  Host the file comes from. */
+	host: string,
+	/**  Host of the page the download started on, if it is another one. */
+	pageHost: string | null,
+	/**  Bytes, if the browser knows. */
+	size: number | null,
+	/**  Media type, if the browser knows. */
+	mime: string | null,
+	/**  Whether the site's cookies go along (you are logged in there). */
+	sendsCredentials: boolean,
+	/**  Folder it would be saved to. */
+	destDir: string,
 };
 
 /**  Live progress of one task. */

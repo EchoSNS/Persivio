@@ -55,6 +55,14 @@ Right-click a download for everything you can do with it; double-click for detai
    mode**, click **Load unpacked** and choose the folder.
 4. Open the extension's options, paste the token, **Save**, **Test connection**.
 
+Persivio then asks before each download from the browser: file, size, site and folder. The
+browser's own download does not start. **Cancel** means the file is not downloaded at all. To
+skip the question: Settings → **Browser integration**. If Persivio is not running, the browser
+downloads as usual.
+
+After an update, replace the files in that folder and click the reload icon on the
+extension's card.
+
 Downloads behind a login work, because the extension passes the cookies of that one link to
 Persivio on your computer. They are erased when the download ends.
 

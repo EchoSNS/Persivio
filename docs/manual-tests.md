@@ -120,12 +120,15 @@ Setup: `extension/README.md` (Load unpacked, paste the token).
 | 9.1 | Options → **Test connection** with Persivio running and browser integration on. | "Connected to Persivio x.y.z." |
 | 9.2 | Change one character of the token, save, test again. | "Wrong pairing token…" |
 | 9.3 | Turn browser integration off in Persivio, test again. | "Persivio is not reachable…" |
-| 9.4 | Download a public ISO or zip from a site. | Brave's download disappears; Persivio shows the task. |
+| 9.4 | Brave: turn on "Ask where to save each file before downloading". Download a public ISO or zip. | No window from Brave; Persivio asks, with name, size and site. Download: the task appears. |
 | 9.5 | **Log in** to a site that serves a private file (e.g. an attachment in your webmail or cloud storage), download it. | The file downloads in Persivio and opens correctly (not a login page). |
 | 9.6 | Quit Persivio, download a zip in Brave. | Brave downloads it itself; a notification explains why. |
-| 9.7 | Right-click a link → **Download with Persivio**. | Added in Persivio. |
+| 9.7 | Right-click a link → **Download with Persivio**. | Persivio asks. |
 | 9.8 | Download a small image (< 1 MB, not in the list). | Stays in Brave. |
 | 9.9 | Open http://127.0.0.1:47321/v1/ping in a Brave tab. | "only the Persivio browser extension may call this" (web pages are refused). |
+| 9.10 | Download with Persivio in the tray, answer. | The window comes up and goes back to the tray. |
+| 9.11 | Cancel the question. | Nothing is downloaded, in Persivio or Brave. |
+| 9.12 | Settings → Browser integration → untick "Ask before…", download. | Added at once. |
 
 ## 10. Updates
 

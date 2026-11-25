@@ -6,7 +6,7 @@ A desktop download manager: a Rust engine with multi-connection segmented HTTP d
 resume, queueing, speed limits and BitTorrent/magnet support (via `librqbit`), with a
 Tauri v2 + Svelte 5 desktop UI.
 
-> **Status:** version 0.6.0, in personal use on Windows. macOS and Linux builds are made and
+> **Status:** version 0.7.0, in personal use on Windows. macOS and Linux builds are made and
 > tested automatically but have not been used day to day. See [CHANGELOG.md](CHANGELOG.md),
 > [known limits](docs/hardening-report.md#not-verified) and [how to release](docs/release.md).
 

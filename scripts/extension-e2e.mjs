@@ -70,6 +70,8 @@ try {
 	const [name, ...value] = info.cookie.split('=');
 	await ctx.addCookies([{ name, value: value.join('='), url: url.origin }]);
 	const page = await ctx.newPage();
+	// Playwright replaces the browser's download handling; the extension needs the real one.
+	await (await ctx.newCDPSession(page)).send('Browser.setDownloadBehavior', { behavior: 'default' });
 	await page.route('**/account', (r) => r.fulfill({ contentType: 'text/html', body: `<a id=d href="${info.url}" download>Download</a>` }));
 	await page.goto(url.origin + '/account');
 	await page.click('#d');

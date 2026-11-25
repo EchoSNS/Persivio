@@ -24,6 +24,7 @@ pub mod error;
 pub mod external;
 pub mod forward;
 pub mod integration;
+pub mod offers;
 pub mod ops;
 pub mod sleep;
 pub mod updates;
@@ -67,6 +68,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::get_task_detail,
             commands::inspect_torrent,
             commands::take_external_requests,
+            commands::list_offers,
+            commands::accept_offer,
+            commands::decline_offer,
             commands::bridge_status,
             commands::new_bridge_token,
             commands::release_notes,
@@ -80,6 +84,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .events(collect_events![
             EngineUiEvent,
             dto::ExternalRequestsEvent,
+            dto::BrowserOffersEvent,
             dto::ClipboardLinksEvent,
             updates::UpdateAvailableEvent
         ])
@@ -258,11 +263,17 @@ fn setup(app: &mut tauri::App) {
         tracing::warn!("no tray icon: {e}");
     }
     app.manage(updates::Updates::default());
+    let asker = handle.clone();
+    let offers = Arc::new(offers::Offers::new(move || {
+        desktop::ask_about_offers(&asker);
+    }));
+    app.manage(Arc::clone(&offers));
     if let Ok(engine) = &engine {
         tauri::async_runtime::spawn(bridge::supervise(
             settings_rx.clone(),
             Arc::clone(engine),
             pv_engine::os_download_dir(),
+            offers,
             Arc::clone(&app.state::<desktop::Desktop>().bridge),
         ));
     }

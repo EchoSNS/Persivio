@@ -216,7 +216,7 @@
 		<div>
 			<span class="label">Torrent file</span>
 			{#if torrent?.info}
-				<div class="panel space-y-2 p-3">
+				<div class="space-y-2 rounded-2xl bg-(--control) p-3">
 					<div class="flex items-center justify-between gap-2 text-sm">
 						<span class="truncate font-medium">{torrent.info.name}</span>
 						<span class="text-xs text-(--muted)">{formatBytes(torrent.info.totalSize)}</span>

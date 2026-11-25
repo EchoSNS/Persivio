@@ -1,5 +1,5 @@
-// Service worker: intercepts browser downloads and the context menu, sends them to the
-// Persivio bridge on 127.0.0.1, and falls back to a normal browser download if Persivio
+// Service worker: intercepts browser downloads and the context menu, offers them to the
+// Persivio bridge on 127.0.0.1 (Persivio asks the user), and falls back to a normal browser download if Persivio
 // is not reachable.
 
 import {
@@ -9,8 +9,10 @@ import {
 	downloadPayload,
 	handOff,
 	isHttpUrl,
+	legacyPayload,
 	normalizeOptions,
-	shouldIntercept
+	shouldIntercept,
+	takeOver
 } from './lib.js';
 
 const MENU_ID = 'persivio-download-link';
@@ -40,7 +42,10 @@ async function sendToPersivio(download, opts) {
 	}
 	const body = downloadPayload(download, cookies, navigator.userAgent);
 	try {
-		const response = await fetch(bridgeUrl(opts, '/v1/downloads'), bridgeInit(opts, 'POST', body));
+		let response = await fetch(bridgeUrl(opts, '/v1/offers'), bridgeInit(opts, 'POST', body));
+		if (response.status === 404) {
+			response = await fetch(bridgeUrl(opts, '/v1/downloads'), bridgeInit(opts, 'POST', legacyPayload(body)));
+		}
 		const message = describeStatus(response.status);
 		return message === 'ok' ? null : message;
 	} catch {
@@ -66,19 +71,56 @@ const downloadsApi = {
 	erase: (id) => chrome.downloads.erase({ id })
 };
 
-chrome.downloads.onCreated.addListener(async (item) => {
-	const opts = await options();
-	if (bypass.delete(item.url) || !shouldIntercept(item, opts)) return;
-	const url = item.finalUrl || item.url;
-	const { result, error } = await handOff(
-		item.id,
-		downloadsApi,
-		() => sendToPersivio({ url, referrer: item.referrer, filename: item.filename }, opts),
-		opts.fallback
-	);
-	if (result !== 'kept') return;
-	notify(opts.fallback ? `Downloading in the browser instead. ${error}` : `Not downloaded: ${error}`);
-});
+/** What Persivio needs to know about a browser download. */
+function details(item) {
+	return {
+		url: item.finalUrl || item.url,
+		referrer: item.referrer,
+		filename: item.filename,
+		size: item.totalBytes,
+		mime: item.mime
+	};
+}
+
+/** Whether a download is ours to take. Uses up a bypass. */
+function wanted(item, opts) {
+	return !bypass.delete(item.url) && shouldIntercept(item, opts);
+}
+
+function explain(result, error) {
+	if (result === 'kept') notify(`Downloading in the browser instead. ${error}`);
+	if (result === 'dropped') notify(`Not downloaded: ${error}`);
+}
+
+if (chrome.downloads.onDeterminingFilename) {
+	// Chromium: the browser waits for `suggest` before it asks where to save the file.
+	chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+		(async () => {
+			const opts = await options();
+			if (!wanted(item, opts)) return 'kept';
+			const { result, error } = await takeOver(
+				item.id,
+				downloadsApi,
+				() => sendToPersivio(details(item), opts),
+				opts.fallback
+			);
+			explain(result, error);
+			return result;
+		})()
+			.catch(() => 'kept')
+			// Nothing to suggest for a cancelled download; Chromium has forgotten it.
+			.then((result) => result === 'kept' && suggest());
+		return true; // `suggest` is called later
+	});
+} else {
+	chrome.downloads.onCreated.addListener(async (item) => {
+		const opts = await options();
+		if (!wanted(item, opts)) return;
+		const send = () => sendToPersivio(details(item), opts);
+		const { result, error } = await handOff(item.id, downloadsApi, send, opts.fallback);
+		if (result === 'kept') explain(opts.fallback ? 'kept' : 'dropped', error);
+	});
+}
 
 chrome.runtime.onInstalled.addListener(() => {
 	chrome.contextMenus.create({
